@@ -29,8 +29,30 @@ npm install
 复制 `.env.example` 为 `.env.local` 并填写飞书凭证：
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env.local  # Linux/Mac
+copy .env.example .env.local  # Windows
 ```
+
+**获取飞书凭证的步骤：**
+
+1. **获取 APP_ID 和 APP_SECRET**：
+   - 登录 [飞书开发者控制台](https://open.feishu.cn/app)
+   - 在"凭证与基础信息"中获取
+
+2. **获取 APP_TOKEN**（如果表格在 Wiki 中）：
+   ```bash
+   npx tsx src/scripts/get-wiki-app-token.ts
+   ```
+
+3. **获取 TABLE_ID 和 VIEW_ID**：
+   - 从表格 URL 中提取：`?table=tblXXX&view=vewXXX`
+
+4. **添加应用权限**（重要）：
+   - 打开飞书多维表格
+   - 点击右上角 "..." → "高级权限" → "添加应用"
+   - 为应用授予读取权限
+
+详细配置步骤请参考：[飞书集成实施指南](./docs/飞书集成实施指南（HNU-TimeLetter）.md)
 
 ### 3. 同步数据
 
