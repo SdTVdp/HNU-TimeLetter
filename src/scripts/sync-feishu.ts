@@ -10,6 +10,8 @@
 import { config } from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
+import OSS from 'ali-oss';
 import type { LocationPoint, Story } from '../lib/types';
 
 config({ path: '.env.local' });
@@ -20,6 +22,13 @@ const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET;
 const FEISHU_APP_TOKEN = process.env.FEISHU_APP_TOKEN;
 const FEISHU_TABLE_ID = process.env.FEISHU_TABLE_ID;
 const FEISHU_VIEW_ID = process.env.FEISHU_VIEW_ID;
+const FEISHU_OSS_TABLE_ID = 'tblwLUNdWNzv1kZw'; // OSS 文件记录表
+
+// 阿里云 OSS 配置
+const OSS_REGION = process.env.ALIYUN_OSS_REGION;
+const OSS_BUCKET = process.env.ALIYUN_OSS_BUCKET;
+const OSS_ACCESS_KEY_ID = process.env.ALIYUN_OSS_ACCESS_KEY_ID;
+const OSS_ACCESS_KEY_SECRET = process.env.ALIYUN_OSS_ACCESS_KEY_SECRET;
 
 // 地点坐标配置（可以后续移到配置文件）
 const LOCATION_COORDS: Record<string, { name: string; x: number; y: number }> = {
@@ -27,6 +36,18 @@ const LOCATION_COORDS: Record<string, { name: string; x: number; y: number }> = 
   'lake-001': { name: '东坡湖', x: 60, y: 55 },
   'siyuan-001': { name: '思源学堂', x: 35, y: 70 },
 };
+
+// 初始化 OSS 客户端
+let ossClient: OSS | null = null;
+if (OSS_REGION && OSS_BUCKET && OSS_ACCESS_KEY_ID && OSS_ACCESS_KEY_SECRET) {
+  ossClient = new OSS({
+    region: OSS_REGION,
+    accessKeyId: OSS_ACCESS_KEY_ID,
+    accessKeySecret: OSS_ACCESS_KEY_SECRET,
+    bucket: OSS_BUCKET,
+  });
+  console.log('✅ OSS 客户端初始化成功');
+}
 
 /**
  * 获取飞书访问令牌
@@ -55,6 +76,201 @@ async function getTenantAccessToken(): Promise<string> {
   }
 
   return data.tenant_access_token;
+}
+
+/**
+ * 下载飞书附件到内存
+ */
+async function downloadFeishuAttachment(token: string, fileToken: string): Promise<Buffer> {
+  const url = `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`;
+  
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`下载附件失败: ${response.statusText}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * 上传文件到 OSS
+ */
+async function uploadToOSS(buffer: Buffer, fileName: string): Promise<{ url: string; path: string; hash: string }> {
+  if (!ossClient) {
+    throw new Error('OSS 客户端未初始化');
+  }
+
+  // 生成唯一文件名（使用 MD5 避免重复上传）
+  const hash = crypto.createHash('md5').update(buffer).digest('hex');
+  const ext = path.extname(fileName) || '.jpg';
+  const ossPath = `hnu-timeletter/${hash}${ext}`;
+
+  try {
+    // 检查文件是否已存在
+    try {
+      await ossClient.head(ossPath);
+      console.log(`  ⏭️  文件已存在，跳过上传: ${ossPath}`);
+    } catch (error: any) {
+      // 文件不存在，执行上传
+      if (error.code === 'NoSuchKey') {
+        await ossClient.put(ossPath, buffer);
+        console.log(`  ✅ 上传成功: ${ossPath}`);
+      } else {
+        throw error;
+      }
+    }
+
+    // 返回公网访问 URL 和相关信息
+    const url = `https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com/${ossPath}`;
+    return { url, path: ossPath, hash };
+  } catch (error) {
+    console.error(`  ❌ OSS 上传失败:`, error);
+    throw error;
+  }
+}
+
+/**
+ * 记录 OSS 文件信息到飞书表格
+ */
+async function recordOSSFile(
+  token: string,
+  fileName: string,
+  ossPath: string,
+  ossUrl: string,
+  hash: string,
+  fileSize: number,
+  usage: string,
+  recordId: string
+): Promise<void> {
+  const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${FEISHU_APP_TOKEN}/tables/${FEISHU_OSS_TABLE_ID}/records`;
+  
+  // 格式化文件大小
+  const formatSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
+  };
+
+  // 获取当前时间戳（毫秒）
+  const timestamp = Date.now();
+
+  const fields = {
+    '文本': `${fileName} - ${usage}`,
+    '文件名': fileName,
+    'OSS路径': ossPath,
+    'OSS_URL': {
+      link: ossUrl,
+      text: ossUrl
+    },
+    'MD5哈希': hash,
+    '文件大小': formatSize(fileSize),
+    '上传时间': timestamp,
+    '用途': usage,
+    '关联记录ID': recordId
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({ fields }),
+    });
+
+    const data = await response.json();
+    
+    if (data.code !== 0) {
+      console.error(`  ⚠️  记录 OSS 文件信息失败: ${data.msg}`);
+    } else {
+      console.log(`  📝 已记录到 OSS 文件表`);
+    }
+  } catch (error) {
+    console.error(`  ⚠️  记录 OSS 文件信息异常:`, error);
+  }
+}
+
+/**
+ * 处理飞书附件字段，下载并上传到 OSS
+ */
+async function processAttachment(
+  token: string,
+  attachmentField: any,
+  usage: string,
+  recordId: string
+): Promise<string> {
+  if (!attachmentField || !Array.isArray(attachmentField) || attachmentField.length === 0) {
+    return '';
+  }
+
+  const firstAttachment = attachmentField[0];
+  const fileToken = firstAttachment.file_token || firstAttachment.token;
+  const fileName = firstAttachment.name || 'image.jpg';
+  
+  if (!fileToken) {
+    return '';
+  }
+
+  try {
+    // 下载附件
+    const buffer = await downloadFeishuAttachment(token, fileToken);
+    
+    // 上传到 OSS
+    const { url, path: ossPath, hash } = await uploadToOSS(buffer, fileName);
+    
+    // 记录到 OSS 文件表
+    await recordOSSFile(token, fileName, ossPath, url, hash, buffer.length, usage, recordId);
+    
+    return url;
+  } catch (error) {
+    console.error(`  ⚠️  处理附件失败:`, error);
+    return '';
+  }
+}
+
+/**
+ * 更新飞书记录的 OSS URL 字段
+ */
+async function updateRecordOSSUrl(
+  token: string,
+  recordId: string,
+  avatarOssUrl: string,
+  mainImageOssUrl: string
+): Promise<void> {
+  const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${FEISHU_APP_TOKEN}/tables/${FEISHU_TABLE_ID}/records/${recordId}`;
+  
+  const fields: Record<string, string> = {};
+  if (avatarOssUrl) fields['头像OSS_URL'] = avatarOssUrl;
+  if (mainImageOssUrl) fields['大图OSS_URL'] = mainImageOssUrl;
+
+  if (Object.keys(fields).length === 0) {
+    return;
+  }
+
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({ fields }),
+  });
+
+  const data = await response.json();
+  
+  if (data.code !== 0) {
+    console.error(`  ⚠️  更新记录失败: ${data.msg}`);
+  } else {
+    console.log(`  ✅ 已回写 OSS URL 到飞书`);
+  }
 }
 
 /**
@@ -123,15 +339,15 @@ async function fetchFeishuRecords(token: string): Promise<any[]> {
 /**
  * 转换飞书数据为本地格式
  */
-function transformData(feishuRecords: any[]): LocationPoint[] {
+async function transformData(token: string, feishuRecords: any[]): Promise<LocationPoint[]> {
   const storiesMap = new Map<string, Story[]>();
   
-  feishuRecords.forEach((record) => {
+  for (const record of feishuRecords) {
     const fields = record.fields;
     
     // 跳过空记录或未发布的记录
     if (!fields['角色ID'] || !fields['故事内容']) {
-      return;
+      continue;
     }
 
     // 飞书字段可能返回对象，需要提取文本值
@@ -145,12 +361,40 @@ function transformData(feishuRecords: any[]): LocationPoint[] {
       return String(field);
     };
 
+    console.log(`\n📝 处理记录: ${getText(fields['角色名'])} - ${record.record_id}`);
+
+    // 处理图片附件
+    let avatarUrl = getText(fields['头像OSS_URL']);
+    let mainImageUrl = getText(fields['大图OSS_URL']);
+
+    // 如果 OSS URL 不存在，则从附件字段下载并上传
+    if (ossClient) {
+      if (!avatarUrl && fields['头像']) {
+        console.log('  📥 处理头像附件...');
+        avatarUrl = await processAttachment(token, fields['头像'], '头像', record.record_id);
+      }
+
+      if (!mainImageUrl && fields['大图']) {
+        console.log('  📥 处理大图附件...');
+        mainImageUrl = await processAttachment(token, fields['大图'], '大图', record.record_id);
+      }
+
+      // 回写 OSS URL 到飞书
+      if (avatarUrl || mainImageUrl) {
+        await updateRecordOSSUrl(token, record.record_id, avatarUrl, mainImageUrl);
+      }
+    } else {
+      // 如果没有配置 OSS，使用原始 URL 字段
+      if (!avatarUrl) avatarUrl = getText(fields['头像URL']);
+      if (!mainImageUrl) mainImageUrl = getText(fields['大图URL']);
+    }
+
     const story: Story = {
       id: record.record_id,
       characterId: getText(fields['角色ID']),
       characterName: getText(fields['角色名']),
-      avatarUrl: getText(fields['头像URL']),
-      mainImageUrl: getText(fields['大图URL']),
+      avatarUrl,
+      mainImageUrl,
       content: getText(fields['故事内容']),
       author: getText(fields['投稿人']),
       date: getText(fields['日期']),
@@ -162,7 +406,7 @@ function transformData(feishuRecords: any[]): LocationPoint[] {
       storiesMap.set(locationId, []);
     }
     storiesMap.get(locationId)!.push(story);
-  });
+  }
   
   // 聚合为地点数据
   const locations: LocationPoint[] = [];
@@ -193,7 +437,7 @@ function writeToFile(data: LocationPoint[]): void {
   const content = JSON.stringify({ locations: data }, null, 2);
   
   fs.writeFileSync(outputPath, content, 'utf-8');
-  console.log(`✅ 数据已写入: ${outputPath}`);
+  console.log(`\n✅ 数据已写入: ${outputPath}`);
   console.log(`📊 共 ${data.length} 个地点，${data.reduce((sum, loc) => sum + loc.stories.length, 0)} 个故事`);
 }
 
@@ -214,10 +458,10 @@ async function main() {
     const feishuRecords = await fetchFeishuRecords(token);
     console.log(`✅ 成功拉取 ${feishuRecords.length} 条记录\n`);
     
-    // 3. 转换数据
-    console.log('🔄 转换数据格式...');
-    const locations = transformData(feishuRecords);
-    console.log(`✅ 转换完成\n`);
+    // 3. 转换数据（包含图片处理）
+    console.log('🔄 转换数据格式并处理图片...');
+    const locations = await transformData(token, feishuRecords);
+    console.log(`\n✅ 转换完成\n`);
     
     // 4. 写入文件
     console.log('💾 写入本地文件...');
