@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/lib/store';
 import { useIsMobile } from '@/lib/hooks';
 import { EnvelopeIntro } from '@/components/shared/EnvelopeIntro';
-import { DesktopExperience } from '@/components/desktop/DesktopExperience';
+import { InteractiveMap } from '@/components/desktop/InteractiveMap';
 import { MobileExperience } from '@/components/mobile/MobileExperience';
 
 export default function Home() {
@@ -40,7 +40,7 @@ export default function Home() {
             animate={{ opacity: 1, filter: "blur(0px)" }}
             transition={{ duration: 1.5, ease: "easeOut" }}
           >
-            {isMobile ? <MobileExperience /> : <DesktopExperience />}
+            {isMobile ? <MobileExperience /> : <InteractiveMap />}
           </motion.div>
         )}
       </AnimatePresence>
