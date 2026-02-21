@@ -93,7 +93,7 @@ export function StaticMapModal({ isOpen, onClose }: StaticMapModalProps) {
             
             <div className="p-4 bg-white text-center border-t border-stone-100">
               <p className="text-[10px] text-stone-400 font-serif tracking-widest uppercase italic">
-                "在这里，寻回那些散落的时光"
+                &quot;在这里，寻回那些散落的时光&quot;
               </p>
             </div>
           </motion.div>
