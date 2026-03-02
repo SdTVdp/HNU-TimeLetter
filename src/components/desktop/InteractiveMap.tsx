@@ -16,9 +16,9 @@ import { LocationPoint } from '@/lib/types';
  *
  * 布局策略:
  *  - 地图容器: absolute right-0, 动画 width 100% ↔ STRIP_WIDTH px (右锚定)
- *  - 故事面板: absolute left-0 right-[STRIP_WIDTH], z-10 (在地图下方)
- *  - 地图覆盖故事面板(z-20); 卷起后 56px 条带可见，故事面板从左侧露出
- *  - 卷轴条按钮: z-30 (位于地图堆叠上下文内，仍高于故事面板)
+ *  - 故事面板: absolute left-0 right-[STRIP_WIDTH], z-30 (位于地图上方)
+ *  - 地图容器: z-10，卷起后 56px 条带可见，故事面板从左侧露出
+ *  - 卷轴条按钮: z-30 (位于地图堆叠上下文内，与故事面板同层级)
  *
  * 性能要点:
  *  - mapContainerRef 指向内层 100vw div，ResizeObserver 不受外层动画影响
