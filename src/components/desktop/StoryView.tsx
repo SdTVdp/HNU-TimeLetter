@@ -36,7 +36,7 @@ export function StoryView({ stories }: StoryViewProps) {
 
   return (
     <div
-      className="w-full h-full overflow-y-auto flex flex-col items-center pt-10 pb-20 select-none scrollbar-hide"
+      className="w-full h-full overflow-y-auto overflow-x-hidden flex flex-col items-center pt-10 pb-20 select-none scrollbar-hide"
       onClick={() => setIsTextVisible(false)}
     >
       <div className="w-full flex-shrink-0">
@@ -56,6 +56,6 @@ export function StoryView({ stories }: StoryViewProps) {
         className={`w-full flex-shrink-0 transition-[height] duration-300 ${isTextVisible ? 'h-8' : 'h-28 md:h-40 lg:h-48'
           }`}
       />
-    </div>
+    </div >
   );
 }
