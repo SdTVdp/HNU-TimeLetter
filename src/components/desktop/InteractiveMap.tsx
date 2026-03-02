@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import data from '@/data/content.json';
@@ -31,21 +31,21 @@ type Phase = 'idle' | 'rolling' | 'rolled' | 'unrolling';
 /** 卷轴条宽度 (px) */
 const STRIP_WIDTH = 56;
 
-/** 地图卷起动画参数 */
+/** 地图卷起及展开交互的动画参数 (优化缓动曲线) */
 const MAP_ROLL_TRANSITION = {
-  roll:   { duration: 0.48, ease: [0.55, 0, 0.9, 0.45] as const },
-  unroll: { duration: 0.52, ease: [0.1, 0.55, 0.45, 1] as const },
+  // 卷起 (即向右压缩露出故事)，增加一点点弹性和更平滑的触底
+  roll: { duration: 0.52, ease: [0.16, 1, 0.3, 1] as const },
+  // 展开 (覆盖故事)，使用带有轻微沉淀感的曲线
+  unroll: { duration: 0.52, ease: [0.32, 0.72, 0, 1] as const },
 };
 
 export function InteractiveMap() {
   // ─── 相位状态机 ────────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<Phase>('idle');
-  /**
-   * phaseRef 始终同步最新 phase，供 animation callback 读取，
-   * 避免 useCallback 依赖导致的闭包过期问题。
-   */
   const phaseRef = useRef<Phase>('idle');
-  phaseRef.current = phase;
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   // ─── 地图折叠状态 (与 phase 解耦，用于驱动 width 动画) ─────────────────────
   /**
@@ -154,8 +154,8 @@ export function InteractiveMap() {
             }}
             exit={{
               opacity: 0,
-              y: '-100%',
-              transition: { duration: 0.36, ease: 'easeIn' },
+              y: '-2%',  // 相比直接飞出屏幕(-100%)，微沉降淡出体验更细腻
+              transition: { duration: 0.4, ease: 'easeInOut' },
             }}
           >
             <StoryView stories={activeLocation.stories} />
@@ -166,9 +166,10 @@ export function InteractiveMap() {
       {/* ── 地图容器 ──────────────────────────────────────────────────────────
           z-10，右锚定。width 从 100% 动画至 STRIP_WIDTH px，实现"卷起"效果。
           overflow-hidden 裁剪内层 100vw div，让地图从右侧边缘开始"收纳"。
+          shadow-[-8px_0_30px_rgba(0,0,0,0.08)] 增强地图覆盖在左侧故事上的层叠质感
       ──────────────────────────────────────────────────────────────────── */}
       <motion.div
-        className="absolute top-0 right-0 bottom-0 z-10 overflow-hidden"
+        className="absolute top-0 right-0 bottom-0 z-10 overflow-hidden shadow-[-8px_0_30px_rgba(0,0,0,0.08)]"
         animate={{ width: isMapRolled ? STRIP_WIDTH : '100%' }}
         transition={isMapRolled ? MAP_ROLL_TRANSITION.roll : MAP_ROLL_TRANSITION.unroll}
         onAnimationComplete={handleMapAnimationComplete}
