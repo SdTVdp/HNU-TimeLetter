@@ -5,74 +5,74 @@ import { Story } from '@/lib/types';
 import { memo, useCallback, useEffect, useMemo } from 'react';
 
 interface StoryCardStackProps {
-  stories: Story[];
-  activeIndices: number[]; // 当前卡片堆叠顺序 (索引数组)
-  onSwipe: () => void;     // 触发“滑动”事件 (切换下一张)
-  onSelect: () => void;    // 触发“点击”事件 (查看/隐藏详情)
+    stories: Story[];
+    activeIndices: number[]; // 当前卡片堆叠顺序 (索引数组)
+    onSwipe: () => void;     // 触发“滑动”事件 (切换下一张)
+    onSelect: () => void;    // 触发“点击”事件 (查看/隐藏详情)
 }
 
 export function StoryCardStack({ stories, activeIndices, onSwipe, onSelect }: StoryCardStackProps) {
-  const normalizedIndices = useMemo(
-    () => activeIndices.filter((index) => index >= 0 && index < stories.length),
-    [activeIndices, stories.length]
-  );
-  const renderIndices = useMemo(
-    () => (normalizedIndices.length > 0 ? normalizedIndices : stories.map((_, i) => i)),
-    [normalizedIndices, stories]
-  );
-  const reversedIndices = useMemo(() => renderIndices.slice().reverse(), [renderIndices]);
-  const topIndex = renderIndices[0];
-  
-  // 共享的拖拽值，仅用于驱动"下一张"卡片的联动动画 (Scale/Opacity)
-  // 实际的卡片位移由各卡片内部的 MotionValue (x) 独立管理
-  const sharedDragX = useMotionValue(0);
+    const normalizedIndices = useMemo(
+        () => activeIndices.filter((index) => index >= 0 && index < stories.length),
+        [activeIndices, stories.length]
+    );
+    const renderIndices = useMemo(
+        () => (normalizedIndices.length > 0 ? normalizedIndices : stories.map((_, i) => i)),
+        [normalizedIndices, stories]
+    );
+    const reversedIndices = useMemo(() => renderIndices.slice().reverse(), [renderIndices]);
+    const topIndex = renderIndices[0];
 
-  // 处理滑动完成的逻辑
-  const handleSwipeComplete = useCallback(() => {
-      onSwipe();
-      // 重置联动值，以便下一张卡片（新的 Top）处于初始状态
-      sharedDragX.set(0); 
-  }, [onSwipe, sharedDragX]);
+    // 共享的拖拽值，仅用于驱动"下一张"卡片的联动动画 (Scale/Opacity)
+    // 实际的卡片位移由各卡片内部的 MotionValue (x) 独立管理
+    const sharedDragX = useMotionValue(0);
 
-  // 预加载故事图片，减少切换到下一张时的解码卡顿
-  useEffect(() => {
-    stories.forEach((story) => {
-      const img = new Image();
-      img.src = story.mainImageUrl;
-    });
-  }, [stories]);
+    // 处理滑动完成的逻辑
+    const handleSwipeComplete = useCallback(() => {
+        onSwipe();
+        // 重置联动值，以便下一张卡片（新的 Top）处于初始状态
+        sharedDragX.set(0);
+    }, [onSwipe, sharedDragX]);
 
-  return (
-    <div className="relative w-full h-[60vh] flex items-center justify-center">
-      <div className="relative w-full h-full flex items-center justify-center">
-        {reversedIndices.map((index, i) => {
-            const isTop = index === topIndex;
-            const story = stories[index];
-            if (!story) return null;
+    // 预加载故事图片，减少切换到下一张时的解码卡顿
+    useEffect(() => {
+        stories.forEach((story) => {
+            const img = new Image();
+            img.src = story.mainImageUrl;
+        });
+    }, [stories]);
 
-            const offset = renderIndices.length - 1 - i; // 0 = 顶层, 1 = 第二层...
+    return (
+        <div className="relative w-full h-[60vh] flex items-center justify-center">
+            <div className="relative w-full h-full flex items-center justify-center">
+                {reversedIndices.map((index, i) => {
+                    const isTop = index === topIndex;
+                    const story = stories[index];
+                    if (!story) return null;
 
-            return (
-                <Card 
-                    key={story.id}
-                    story={story}
-                    isTop={isTop}
-                    offset={offset}
-                    storyCount={stories.length}
-                    sharedDragX={sharedDragX}
-                    zIndex={renderIndices.length - offset}
-                    onSwipe={handleSwipeComplete}
-                    onSelect={onSelect}
-                />
-            );
-        })}
-      </div>
-      
-      <div className="absolute bottom-4 text-gray-400 text-sm animate-pulse">
-        {stories.length > 1 ? "Swipe to browse, Click to read" : "Click to read"}
-      </div>
-    </div>
-  );
+                    const offset = renderIndices.length - 1 - i; // 0 = 顶层, 1 = 第二层...
+
+                    return (
+                        <Card
+                            key={story.id}
+                            story={story}
+                            isTop={isTop}
+                            offset={offset}
+                            storyCount={stories.length}
+                            sharedDragX={sharedDragX}
+                            zIndex={renderIndices.length - offset}
+                            onSwipe={handleSwipeComplete}
+                            onSelect={onSelect}
+                        />
+                    );
+                })}
+            </div>
+
+            <div className="absolute bottom-4 text-gray-400 text-sm animate-pulse">
+                {stories.length > 1 ? "Swipe to browse, Click to read" : "Click to read"}
+            </div>
+        </div>
+    );
 }
 
 interface CardProps {
@@ -102,22 +102,23 @@ function CardComponent({ story, isTop, offset, storyCount, sharedDragX, zIndex, 
     // 我们需要将它从屏幕外平滑移动回 x=0，实现“从同方向插入底部”的效果
     useEffect(() => {
         if (!isTop && x.get() !== 0) {
-            animate(x, 0, { type: "spring", stiffness: 300, damping: 25 });
+            // 增加一点阻尼(damping)，使飞走后其他卡片补位更像物理沉降
+            animate(x, 0, { type: "spring", stiffness: 280, damping: 28 });
         }
     }, [isTop, x]);
 
     // 基础样式计算
     const isTwoCards = storyCount === 2;
     const scaleFactor = isTwoCards ? 0.02 : 0.05;
-    
+
     const baseScale = 1 - offset * scaleFactor;
-    const baseY = offset * 15;
-    const baseRotate = offset * 3;
+    const baseY = offset * 18;  // 将基础间距稍微加大，凸显堆叠层次
+    const baseRotate = offset * 2.5; // 旋转角度略微收敛
     // 目标状态 (下一层级，即 offset - 1)
     const targetOffset = Math.max(0, offset - 1);
     const targetScale = 1 - targetOffset * scaleFactor;
-    const targetY = targetOffset * 15;
-    const targetRotate = targetOffset * 3;
+    const targetY = targetOffset * 18;
+    const targetRotate = targetOffset * 2.5;
 
     // --- 联动动画逻辑 ---
     const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1000;
@@ -141,12 +142,12 @@ function CardComponent({ story, isTop, offset, storyCount, sharedDragX, zIndex, 
         style = { ...style, scale: 1, opacity: 1, y: 0, rotate: topRotate };
     } else {
         // 所有底层卡片: 响应 sharedDragX 实现联动放大/上浮/透明度变化
-        style = { 
-            ...style, 
-            scale: animatedScale, 
-            opacity: 1, 
+        style = {
+            ...style,
+            scale: animatedScale,
+            opacity: 1,
             y: animatedY,
-            rotate: animatedRotate 
+            rotate: animatedRotate
         };
     }
 
@@ -154,21 +155,22 @@ function CardComponent({ story, isTop, offset, storyCount, sharedDragX, zIndex, 
     const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         const offsetVal = info.offset.x;
         const velocity = info.velocity.x;
-        
-        if ((Math.abs(offsetVal) > 100 || Math.abs(velocity) > 500) && storyCount > 1) {
+
+        // 降低飞出判定阈值，响应更加灵敏 (原100->80, 原500->400)
+        if ((Math.abs(offsetVal) > 80 || Math.abs(velocity) > 400) && storyCount > 1) {
             const direction = offsetVal > 0 ? 1 : -1;
             // 播放飞出动画
             await new Promise<void>(resolve => {
-                animate(x, direction * screenWidth, { 
-                    duration: 0.3, 
-                    ease: "easeIn",
+                animate(x, direction * screenWidth, {
+                    duration: 0.25, // 稍微加快飞出速度
+                    ease: "circOut", // 更改缓动函数，初速度更快
                     onComplete: () => resolve()
                 });
             });
             onSwipe();
         } else {
-            // 回弹
-            animate(x, 0, { type: "spring", stiffness: 300, damping: 20 });
+            // 回弹，增强重量感与物理反馈 (stiffness 降低，damping 增大)
+            animate(x, 0, { type: "spring", stiffness: 240, damping: 25 });
         }
     };
 
@@ -178,7 +180,7 @@ function CardComponent({ story, isTop, offset, storyCount, sharedDragX, zIndex, 
             style={style}
             drag={isTop ? "x" : false}
             dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-            dragElastic={0.1}
+            dragElastic={0.25} // 增大 dragElastic 允许更明显的橡皮筋反馈拉扯感
             onDragEnd={handleDragEnd}
             onClick={(e) => {
                 e.stopPropagation();
@@ -189,13 +191,13 @@ function CardComponent({ story, isTop, offset, storyCount, sharedDragX, zIndex, 
         >
             <div className="relative h-full w-auto">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img 
-                    src={story.mainImageUrl} 
+                <img
+                    src={story.mainImageUrl}
                     alt={story.characterName}
                     className="h-full w-auto object-cover rounded-sm pointer-events-none select-none block"
                     draggable={false}
                 />
-                
+
             </div>
         </motion.div>
     );
