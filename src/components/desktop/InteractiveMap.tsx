@@ -14,12 +14,11 @@ import { LocationPoint } from '@/lib/types';
  *  idle ──(点击 Pin)──► rolling ──(地图动画完成)──► rolled
  *  rolled ──(点击卷轴)──► unrolling ──(故事退出完成 → 地图展开 → 动画完成)──► idle
  *
- * 布局策略 (性能优化版):
- *  - 地图容器: absolute inset-0, 保持 width: 100% 不变
- *  - 卷起动画: 使用 translateX 将地图右移 (GPU 合成层，零 layout reflow)
- *  - 故事面板: absolute left-0 right-[STRIP_WIDTH], z-10 (在地图下方)
- *  - 地图覆盖故事面板(z-20); 卷起后 56px 条带可见，故事面板从左侧露出
- *  - 卷轴条按钮: z-30 (位于地图堆叠上下文内，仍高于故事面板)
+ * 布局策略:
+ *  - 地图容器: absolute right-0, 动画 width 100% ↔ STRIP_WIDTH px (右锚定)
+ *  - 故事面板: absolute left-0 right-[STRIP_WIDTH], z-30 (位于地图上方)
+ *  - 地图容器: z-10，卷起后 56px 条带可见，故事面板从左侧露出
+ *  - 卷轴条按钮: z-30 (位于地图堆叠上下文内，与故事面板同层级)
  *
  * 性能要点:
  *  - 使用 transform (translateX) 代替 width 动画，跳过 Layout/Paint 阶段
