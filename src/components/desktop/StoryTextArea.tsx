@@ -27,51 +27,51 @@ export function StoryTextArea({ story, isVisible }: StoryTextAreaProps) {
       {isVisible && (
         <motion.div
           key={story.id} // 关键: key 变化时触发重新渲染动画
-          // 进场动画: 从下方 20px 处淡入
-          initial={{ opacity: 0, y: 20 }}
+          // 进场动画: 从下方 30px 处淡入，带有更轻柔的缓动
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          // 退场动画: 向上方 20px 处淡出
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          // 退场动画: 增加细微的下沉退出(模拟失去焦点)，并加快透明度变化
+          exit={{ opacity: 0, y: 15 }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }} // 类 spring 弹性贝塞尔
           className="relative w-full max-w-2xl mx-auto mt-8 p-8 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 select-none"
           onClick={(e) => e.stopPropagation()}
         >
-            {/* 
+          {/* 
               静态邮票 (Static Stamp)
               - 位置: 左上角 (-top-6 -left-6)
               - 样式: 旋转、齿孔边框、阴影
             */}
-            <div className="absolute -top-6 -left-6 transform -rotate-6">
-                <div className="w-20 h-24 bg-white p-1 shadow-md border-[2px] border-gray-200 border-dotted">
-                    <div className="relative w-full h-full bg-gray-100 overflow-hidden">
-                        <Image 
-                            src={story.avatarUrl} 
-                            alt={story.characterName}
-                            fill
-                            className="object-cover"
-                            sizes="80px"
-                        />
-                    </div>
-                </div>
+          <div className="absolute -top-6 -left-6 transform -rotate-6">
+            <div className="w-20 h-24 bg-white p-1 shadow-md border-[2px] border-gray-200 border-dotted">
+              <div className="relative w-full h-full bg-gray-100 overflow-hidden">
+                <Image
+                  src={story.avatarUrl}
+                  alt={story.characterName}
+                  fill
+                  className="object-cover"
+                  sizes="80px"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 故事正文内容区 */}
+          <div className="pl-12">
+            {/* 角色名 (大标题) */}
+            <h3 className="text-2xl font-serif text-gray-800 mb-4 tracking-wider">
+              {story.characterName}
+            </h3>
+
+            {/* 故事文本: 保留换行符 (whitespace-pre-wrap) */}
+            <div className="text-gray-600 leading-relaxed whitespace-pre-wrap font-sans text-lg">
+              {story.content}
             </div>
 
-            {/* 故事正文内容区 */}
-            <div className="pl-12">
-                {/* 角色名 (大标题) */}
-                <h3 className="text-2xl font-serif text-gray-800 mb-4 tracking-wider">
-                    {story.characterName}
-                </h3>
-                
-                {/* 故事文本: 保留换行符 (whitespace-pre-wrap) */}
-                <div className="text-gray-600 leading-relaxed whitespace-pre-wrap font-sans text-lg">
-                    {story.content}
-                </div>
-                
-                {/* 底部信息: 作者与日期 */}
-                <div className="mt-6 text-right text-sm text-gray-400 font-serif italic">
-                    — {story.author} · {story.date}
-                </div>
+            {/* 底部信息: 作者与日期 */}
+            <div className="mt-6 text-right text-sm text-gray-400 font-serif italic">
+              — {story.author} · {story.date}
             </div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
