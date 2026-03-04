@@ -4,19 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { X, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
-
-interface Story {
-  id: string;
-  characterId: string;
-  characterName: string;
-  avatarUrl: string;
-  mainImageUrl: string;
-  content: string;
-  author: string;
-  date: string;
-  locationId: string;
-  locationName?: string;
-}
+import type { Story } from '@/lib/types';
 
 interface MobileDetailModalProps {
   story: Story | null;

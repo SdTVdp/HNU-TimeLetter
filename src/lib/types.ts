@@ -14,6 +14,7 @@ export interface Story {
   author: string;
   date: string;           // YYYY.MM.DD
   locationId: string;     // 关联的地点ID
+  locationName?: string;
 }
 
 // 地点实体 (前端聚合用)

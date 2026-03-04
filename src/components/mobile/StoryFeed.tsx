@@ -4,19 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import data from '@/data/content.json';
-
-interface Story {
-  id: string;
-  characterId: string;
-  characterName: string;
-  avatarUrl: string;
-  mainImageUrl: string;
-  content: string;
-  author: string;
-  date: string;
-  locationId: string;
-  locationName?: string;
-}
+import type { Story } from '@/lib/types';
 
 interface StoryFeedProps {
   onStoryClick: (story: Story) => void;

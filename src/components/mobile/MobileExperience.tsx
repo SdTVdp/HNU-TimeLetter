@@ -14,19 +14,7 @@ import { StoryFeed } from './StoryFeed';
 import { MobileDetailModal } from './MobileDetailModal';
 import { StaticMapModal } from './StaticMapModal';
 import data from '@/data/content.json';
-
-interface Story {
-  id: string;
-  characterId: string;
-  characterName: string;
-  avatarUrl: string;
-  mainImageUrl: string;
-  content: string;
-  author: string;
-  date: string;
-  locationId: string;
-  locationName?: string;
-}
+import type { Story } from '@/lib/types';
 
 export function MobileExperience() {
   const [selectedId, setSelectedId] = useState<string | null>(null);

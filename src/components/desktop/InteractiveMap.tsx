@@ -218,7 +218,8 @@ export function InteractiveMap() {
                   className="object-contain"
                   priority
                   sizes="100vw"
-                  onLoadingComplete={(img) => {
+                  onLoad={(e) => {
+                    const img = e.currentTarget;
                     if (img.naturalWidth && img.naturalHeight) {
                       setMapAspect(img.naturalWidth / img.naturalHeight);
                     }
