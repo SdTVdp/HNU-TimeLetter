@@ -7,7 +7,7 @@
  * 整合 StoryFeed, MobileDetailModal 和 StaticMapModal
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Map as MapIcon } from 'lucide-react';
 import { StoryFeed } from './StoryFeed';
@@ -45,27 +45,30 @@ export function MobileExperience() {
     return allStories.filter(s => s.locationId === currentStory.locationId);
   }, [currentStory, allStories]);
 
+  const currentLocalIndex = useMemo(() => {
+    return locationStories.findIndex(s => s.id === selectedId);
+  }, [locationStories, selectedId]);
+
+  const currentLocationIndex = useMemo(() => {
+    if (!currentStory) return -1;
+    return locationsWithStories.findIndex(l => l.id === currentStory.locationId);
+  }, [locationsWithStories, currentStory]);
+
   const handleNextLocal = () => {
-    const currentIndex = locationStories.findIndex(s => s.id === selectedId);
-    if (currentIndex < locationStories.length - 1) setSelectedId(locationStories[currentIndex + 1].id);
+    if (currentLocalIndex < locationStories.length - 1) setSelectedId(locationStories[currentLocalIndex + 1].id);
   };
 
   const handlePrevLocal = () => {
-    const currentIndex = locationStories.findIndex(s => s.id === selectedId);
-    if (currentIndex > 0) setSelectedId(locationStories[currentIndex - 1].id);
+    if (currentLocalIndex > 0) setSelectedId(locationStories[currentLocalIndex - 1].id);
   };
 
   // 导航逻辑：跨地点切换 (Global/Location Jump)
   const handleNextLocation = () => {
-    if (!currentStory) return;
-    const locIdx = locationsWithStories.findIndex(l => l.id === currentStory.locationId);
-    if (locIdx < locationsWithStories.length - 1) setSelectedId(locationsWithStories[locIdx + 1].stories[0].id);
+    if (currentLocationIndex < locationsWithStories.length - 1) setSelectedId(locationsWithStories[currentLocationIndex + 1].stories[0].id);
   };
 
   const handlePrevLocation = () => {
-    if (!currentStory) return;
-    const locIdx = locationsWithStories.findIndex(l => l.id === currentStory.locationId);
-    if (locIdx > 0) setSelectedId(locationsWithStories[locIdx - 1].stories[0].id);
+    if (currentLocationIndex > 0) setSelectedId(locationsWithStories[currentLocationIndex - 1].stories[0].id);
   };
 
   // 滚动穿透锁定 (符合文档 4.2 要求)
@@ -102,12 +105,12 @@ export function MobileExperience() {
             onClose={() => setSelectedId(null)} 
             onNextLocal={handleNextLocal}
             onPrevLocal={handlePrevLocal}
-            hasMoreLocal={locationStories.findIndex(s => s.id === selectedId) < locationStories.length - 1}
-            hasPrevLocal={locationStories.findIndex(s => s.id === selectedId) > 0}
+            hasMoreLocal={currentLocalIndex < locationStories.length - 1}
+            hasPrevLocal={currentLocalIndex > 0}
             onNextLocation={handleNextLocation}
             onPrevLocation={handlePrevLocation}
-            hasMoreLocation={locationsWithStories.findIndex(l => l.id === currentStory.locationId) < locationsWithStories.length - 1}
-            hasPrevLocation={locationsWithStories.findIndex(l => l.id === currentStory.locationId) > 0}
+            hasMoreLocation={currentLocationIndex < locationsWithStories.length - 1}
+            hasPrevLocation={currentLocationIndex > 0}
           />
         )}
       </AnimatePresence>

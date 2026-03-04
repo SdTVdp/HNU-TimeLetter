@@ -73,22 +73,19 @@ export function InteractiveMap() {
   const [rollOffset, setRollOffset] = useState(0);
 
   useLayoutEffect(() => {
-    const updateRollOffset = () => setRollOffset(window.innerWidth - STRIP_WIDTH);
-    updateRollOffset();
-    window.addEventListener('resize', updateRollOffset);
-    return () => window.removeEventListener('resize', updateRollOffset);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!mapAspect) return;
     const container = mapContainerRef.current;
     if (!container) return;
 
-    const updateSize = () => {
-      // 动画过渡期间（rolling/unrolling）跳过尺寸更新，避免无效 re-render
-      if (phaseRef.current === 'rolling' || phaseRef.current === 'unrolling') return;
+    const updateLayout = () => {
       const { width, height } = container.getBoundingClientRect();
       if (!width || !height) return;
+
+      setRollOffset(Math.max(0, width - STRIP_WIDTH));
+
+      if (!mapAspect) return;
+      // 动画过渡期间（rolling/unrolling）跳过地图尺寸更新，避免无效 re-render
+      if (phaseRef.current === 'rolling' || phaseRef.current === 'unrolling') return;
+
       const containerAspect = width / height;
       if (containerAspect > mapAspect) {
         setMapSize({ width: height * mapAspect, height });
@@ -97,8 +94,8 @@ export function InteractiveMap() {
       }
     };
 
-    updateSize();
-    const obs = new ResizeObserver(updateSize);
+    updateLayout();
+    const obs = new ResizeObserver(updateLayout);
     obs.observe(container);
     return () => obs.disconnect();
   }, [mapAspect]);
