@@ -20,13 +20,13 @@ export default function Home() {
 
   if (!mounted) {
     return (
-      <div className="fixed inset-0 bg-[#fdfbf7]" />
+      <div className="page-paper fixed inset-0" />
     );
   }
 
   return (
     <main
-      className={`relative w-full bg-[#fdfbf7] ${
+      className={`page-paper relative w-full ${
         isEnvelopeOpened ? 'min-h-screen' : 'h-screen overflow-hidden'
       }`}
     >
