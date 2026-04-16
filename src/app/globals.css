@@ -166,6 +166,38 @@
   }
 }
 
+/* ── Lenis 平滑滚动 ── */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+/* 隐藏原生滚动条 — Lenis 接管滚动后不需要原生滚动条 */
+html.lenis {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html.lenis::-webkit-scrollbar {
+  display: none !important;
+}
+
 @layer utilities {
   /* 丝带 clip-path 显影动画 — 纯 CSS 过渡，性能优于 JS 驱动 */
   .hero-ribbon-clip {

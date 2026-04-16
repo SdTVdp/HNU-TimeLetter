@@ -199,7 +199,7 @@ function calcLetterCenterOffset(): { x: number; y: number } {
  * 主组件
  * ──────────────────────────────────────────── */
 export function EnvelopeIntro() {
-  const { setEnvelopeOpened } = useAppStore();
+  const { setEnvelopeOpened, setTransitioning } = useAppStore();
   const [phase, setPhase] = useState<Phase>('loading');
   const [ribbonRevealed, setRibbonRevealed] = useState(false);
   const [isShattered, setIsShattered] = useState(false);
@@ -252,7 +252,8 @@ export function EnvelopeIntro() {
         },
       });
 
-      if (cancelled || phaseRef.current === 'opening') return;
+      // phaseRef.current 可在 await 期间被异步更新为 'opening'
+      if (cancelled || (phaseRef as React.RefObject<Phase>).current === 'opening') return;
       setPhase('idle');
 
       // 闲置呼吸浮动 — 赋予信封生命感
@@ -322,6 +323,9 @@ export function EnvelopeIntro() {
     });
     await sleep(500);
 
+    // 激活过渡遮罩 — 在信纸放大前就显示，防止过渡期间页脚露出
+    setTransitioning(true);
+
     const targetScale = calcLetterScale();
     void openControls.start({
       scale: targetScale,
@@ -334,7 +338,7 @@ export function EnvelopeIntro() {
     await sleep(900);
 
     setEnvelopeOpened(true);
-  }, [envelopeControls, openControls, shellDropControls, setEnvelopeOpened]);
+  }, [envelopeControls, openControls, shellDropControls, setEnvelopeOpened, setTransitioning]);
 
   const isIdle = phase === 'idle';
   const isOpening = phase === 'opening';
@@ -428,7 +432,7 @@ export function EnvelopeIntro() {
                   style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 50%)' }}
                 />
 
-                {/* 顶部封盖 — 3D翻转 */}
+                {/* 顶部封盖 — 3D翻转，翻转至90°时 zIndex 瞬间降为0（低于信纸 z-10） */}
                 <motion.div
                   className="absolute inset-x-0 top-0 z-30 h-1/2 origin-top bg-[#e8e0d5] shadow-md"
                   style={{
@@ -441,7 +445,7 @@ export function EnvelopeIntro() {
                       zIndex: 0,
                       transition: {
                         rotateX: { duration: 0.6, ease: 'easeInOut' },
-                        zIndex: { delay: 0.3 },
+                        zIndex: { delay: 0.25, duration: 0, type: 'tween' },
                       },
                     },
                   }}

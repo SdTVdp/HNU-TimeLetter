@@ -13,9 +13,11 @@ import { useEffect, useRef, useCallback, useState } from 'react';
  * - 非可逆单向线性插值：向下滚动时正向曝光，向上回滚时冻结在历史最远端
  *
  * 路径坐标（占比，相对各页面左上角 0%,0%）：
- *   关于企划页：P1(17.396%,0%) → P2(17.396%,0.5%) → P3(19.15%,7.50%) → P4(107.5%,40.43%)
- *   鸣谢页：    P5(-2.19%,65.40%) → P6(32%,126.27%)
+ *   关于企划页：P0(17.396%,-20%) → P1(17.396%,0%) → P2(17.396%,5%) → P3(19.15%,7.50%) → P4(107.5%,40.43%)
+ *   鸣谢页：    P5(-2.19%,65.40%) → P6(32%,150%)
  *
+ * P0 在首页上方，与丝带（ribbon）自然衔接，被首屏 page-paper 遮盖，滚动时逐步曝光。
+ * P6 延伸进页脚红色区域，确保引导线尾部与页脚衔接。
  * 注意：P4→P5 是跨越"关于我们"整个页面的连续折线段。
  */
 
@@ -57,17 +59,21 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
     const crTop = crRect.top + window.scrollY - containerTop;
     const crH = crRect.height;
 
-    // 计算6个点的像素坐标（相对于容器）
+    // 计算7个点的像素坐标（相对于容器）
+    // P0: 在"关于企划"上方 20%，衔接首页丝带（被首屏遮盖，滚动时渐露）
+    const p0 = { x: vw * 0.17396, y: apTop - apH * 0.20 };
     const p1 = { x: vw * 0.17396, y: apTop };
-    const p2 = { x: vw * 0.17396, y: apTop + apH * 0.005 };
+    // P2: 竖直段下延至 5%（原 0.5% 太短，无法形成与丝带的自然衔接）
+    const p2 = { x: vw * 0.17396, y: apTop + apH * 0.05 };
     const p3 = { x: vw * 0.1915, y: apTop + apH * 0.075 };
     const p4 = { x: vw * 1.075, y: apTop + apH * 0.4043 };
     // P5 在鸣谢页（跨越了关于我们页面）
     const p5 = { x: vw * -0.0219, y: crTop + crH * 0.654 };
-    const p6 = { x: vw * 0.32, y: crTop + crH * 1.2627 };
+    // P6: 延伸至鸣谢页 150%，确保尾部伸入页脚红色区域
+    const p6 = { x: vw * 0.32, y: crTop + crH * 1.50 };
 
-    // SVG 覆盖范围：从 P1 到 P6
-    const svgTop = Math.min(p1.y, p2.y) - 60; // 上方留出 stroke 宽度余量
+    // SVG 覆盖范围：从 P0 到 P6
+    const svgTop = Math.min(p0.y, p1.y) - 60; // 上方留出 stroke 宽度余量
     const svgBottom = p6.y + 60;
     const svgHeight = svgBottom - svgTop;
 
@@ -77,6 +83,7 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
       y: p.y - svgTop,
     });
 
+    const lp0 = toLocal(p0);
     const lp1 = toLocal(p1);
     const lp2 = toLocal(p2);
     const lp3 = toLocal(p3);
@@ -84,9 +91,10 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
     const lp5 = toLocal(p5);
     const lp6 = toLocal(p6);
 
-    // 一条完整连续折线：P1→P2→P3→P4→P5→P6
+    // 一条完整连续折线：P0→P1→P2→P3→P4→P5→P6
     const d = [
-      `M ${lp1.x} ${lp1.y}`,
+      `M ${lp0.x} ${lp0.y}`,
+      `L ${lp1.x} ${lp1.y}`,
       `L ${lp2.x} ${lp2.y}`,
       `L ${lp3.x} ${lp3.y}`,
       `L ${lp4.x} ${lp4.y}`,

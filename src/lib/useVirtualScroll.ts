@@ -1,88 +1,60 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import Lenis from 'lenis';
 
 /**
- * 虚拟滚动动量 (Virtual Scroll Momentum)
+ * 平滑滚动 (Smooth Scroll via Lenis)
  *
- * 基础位移遵循线性插值，即滚动多少、移动多少。
- * 外层套用物理阻尼 (Friction) 与惯性 (Inertia)，使视觉丝滑。
+ * 使用 Lenis.js 替代自定义 wheel 拦截实现，提供丝滑惯性滚动体验。
  *
- * 实现原理：
- *  - 拦截原生 wheel 事件，累积目标滚动位置
- *  - 使用 rAF + lerp 将 window.scrollTo 平滑过渡到目标位置
- *  - 保持原生滚动条、键盘导航和触摸滑动的兼容性
- *  - 移动端不拦截 touch（系统已自带动量滚动）
+ * 配置参数来源：HIMEMATSU 参考站点（见 todo/滚动.md）
+ *  - duration: 1.2（动画持续时间，越长越平滑）
+ *  - easing: 指数缓动函数（开始迅速响应，结尾极其缓慢地停下）
+ *  - wheelMultiplier: 1（鼠标滚轮灵敏度）
+ *  - touchMultiplier: 2（触摸屏灵敏度）
+ *
+ * Lenis 自动管理：
+ *  - 滚轮事件拦截与平滑插值
+ *  - html.lenis / html.lenis-scrolling 等 CSS 类名切换
+ *  - 键盘导航兼容
+ *
+ * 原生滚动条由 globals.css 中的 CSS 规则隐藏。
  */
 export function useVirtualScroll(enabled = true) {
-  const targetY = useRef(0);
-  const currentY = useRef(0);
-  const rafId = useRef(0);
+  const lenisRef = useRef<Lenis | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
-
-    // 隐藏原生滚动条（避免双滚动条），但保留滚动能力
-    document.documentElement.style.scrollbarWidth = 'none';
-    const styleEl = document.createElement('style');
-    styleEl.textContent = '::-webkit-scrollbar { display: none !important; }';
-    document.head.appendChild(styleEl);
-
-    const LERP = 0.1; // 阻尼系数：越小越丝滑，越大越跟手
-    let lastScrollToY = -1;
-
-    // 同步初始位置
-    targetY.current = window.scrollY;
-    currentY.current = window.scrollY;
-
-    const maxScroll = () =>
-      Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-
-    const clamp = (v: number) => Math.max(0, Math.min(v, maxScroll()));
-
-    /* ── Wheel（桌面端） ── */
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      targetY.current = clamp(targetY.current + e.deltaY);
-    };
-
-    /* ── 外部滚动（滚动条拖拽 / 浏览器导航 / 锚点跳转） ── */
-    const handleScroll = () => {
-      // 若原生 scrollY 与我们上次 scrollTo 的值有较大偏差，说明是外部触发
-      if (Math.abs(window.scrollY - lastScrollToY) > 2) {
-        targetY.current = window.scrollY;
-        currentY.current = window.scrollY;
+    if (!enabled) {
+      if (lenisRef.current) {
+        lenisRef.current.destroy();
+        lenisRef.current = null;
       }
-    };
+      return;
+    }
 
-    /* ── rAF 循环 ── */
-    const tick = () => {
-      currentY.current += (targetY.current - currentY.current) * LERP;
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      smoothWheel: true,
+      wheelMultiplier: 1,
+      touchMultiplier: 2,
+    });
 
-      // 距离足够小时直接 snap，避免无限逼近
-      if (Math.abs(targetY.current - currentY.current) < 0.5) {
-        currentY.current = targetY.current;
-      }
+    lenisRef.current = lenis;
 
-      lastScrollToY = Math.round(currentY.current);
-      window.scrollTo(0, lastScrollToY);
+    function raf(time: number) {
+      lenis.raf(time);
+      requestAnimationFrame(raf);
+    }
 
-      rafId.current = requestAnimationFrame(tick);
-    };
-
-    window.addEventListener('wheel', handleWheel, { passive: false });
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    rafId.current = requestAnimationFrame(tick);
+    requestAnimationFrame(raf);
 
     return () => {
-      window.removeEventListener('wheel', handleWheel);
-      window.removeEventListener('scroll', handleScroll);
-      cancelAnimationFrame(rafId.current);
-      // 恢复原生滚动条
-      document.documentElement.style.scrollbarWidth = '';
-      styleEl.remove();
+      lenis.destroy();
+      lenisRef.current = null;
     };
   }, [enabled]);
 
-  return { currentY, targetY };
+  return lenisRef;
 }

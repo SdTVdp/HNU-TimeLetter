@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/lib/store';
 import { useIsMobile } from '@/lib/hooks';
@@ -12,9 +12,10 @@ import { ScrollSections } from '@/components/sections/ScrollSections';
 import { Footer } from '@/components/sections/Footer';
 
 export default function Home() {
-  const { isEnvelopeOpened } = useAppStore();
+  const { isEnvelopeOpened, isTransitioning, setTransitioning } = useAppStore();
   const isMobile = useIsMobile();
   const [mounted, setMounted] = useState(false);
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 虚拟滚动动量：仅在桌面端 + 信封未打开（可滚动浏览关于页面）时启用
   useVirtualScroll(mounted && !isEnvelopeOpened && !isMobile);
@@ -23,6 +24,20 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // 过渡遮罩自动消退：当地图内容渲染完成后延时淡出
+  useEffect(() => {
+    if (isEnvelopeOpened && isTransitioning) {
+      transitionTimerRef.current = setTimeout(() => {
+        setTransitioning(false);
+      }, 2500); // 等待 AnimatePresence exit(1s) + 地图入场(1.5s) 后消退
+    }
+    return () => {
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current);
+      }
+    };
+  }, [isEnvelopeOpened, isTransitioning, setTransitioning]);
 
   if (!mounted) {
     return (
@@ -64,6 +79,27 @@ export default function Home() {
             transition={{ duration: 1.5, ease: 'easeOut' }}
           >
             {isMobile ? <MobileExperience /> : <InteractiveMap />}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── 过渡遮罩：信纸放大→地图加载期间覆盖页脚 ── */}
+      <AnimatePresence>
+        {isTransitioning && (
+          <motion.div
+            key="transition-overlay"
+            className="fixed inset-0 z-[100] page-paper flex items-center justify-center"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1, ease: 'easeInOut' }}
+          >
+            <motion.p
+              className="font-serif text-muted-foreground text-lg tracking-[0.22em]"
+              animate={{ opacity: [0.4, 0.8, 0.4] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              加载中…
+            </motion.p>
           </motion.div>
         )}
       </AnimatePresence>
