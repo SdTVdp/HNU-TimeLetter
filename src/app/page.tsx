@@ -24,6 +24,15 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
   }, []);
+  useEffect(() => {
+    document.documentElement.classList.add('home-scrollbar-hidden');
+    document.body.classList.add('home-scrollbar-hidden');
+
+    return () => {
+      document.documentElement.classList.remove('home-scrollbar-hidden');
+      document.body.classList.remove('home-scrollbar-hidden');
+    };
+  }, []);
 
   // 过渡遮罩自动消退：当地图内容渲染完成后延时淡出
   useEffect(() => {
