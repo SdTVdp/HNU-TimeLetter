@@ -13,6 +13,7 @@
 - **Styling**: `Tailwind CSS` + `clsx` + `tailwind-merge`
 - **UI Library**: `Shadcn/UI` (Button, Dialog, ScrollArea, Tooltip)
 - **Animation**: `Framer Motion`
+- **Smooth Scroll**: `Lenis`（桌面端启封态下滚页面群）
 - **Icons**: `Lucide React`
 - **State**: `Zustand` (用于管理全局状态)
 
@@ -60,7 +61,7 @@ src/
 **详细流程**:
 1. **Auth**: 使用飞书自建应用 `App ID` + `App Secret` 获取 `tenant_access_token`。
 2. **Fetch**: 调用多维表格 API (List records)。
-   - `view_id`: 仅拉取“已发布(Published)”视图的数据。
+   - `view_id`: 若已配置，则按指定视图读取数据。
    - `field_names`: 仅拉取需要的字段。
 3. **Transform & Download**: 
    - 将飞书原始数据清洗为符合 [数据模型](../architecture/数据模型.md) 的格式。

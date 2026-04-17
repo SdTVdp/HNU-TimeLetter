@@ -65,7 +65,7 @@ export function StoryView({ stories }: StoryViewProps) {
             <p className="font-serif text-3xl tracking-[0.2em] text-stone-700">空地点</p>
             <p className="mt-4 font-serif text-base leading-8 text-stone-500">
               这里的 pin 已经就位，但故事卡片还没有被写进时光笺。
-              你可以在新的飞书地图编辑器里补上角色、图片与文案，再重新同步网页内容。
+              你可以先在飞书故事表里补上角色、图片与文案，再重新同步网页内容。
             </p>
           </div>
         </div>

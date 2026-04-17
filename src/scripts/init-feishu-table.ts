@@ -102,7 +102,6 @@ async function main() {
     await createField(token, "日期", 1);          // 文本 (YYYY.MM.DD)
     await createField(token, "地点ID", 1);        // 文本
     await createField(token, "地点名称", 1);      // 文本
-    await createField(token, "状态", 3);          // 单选（草稿/已发布）
 
     console.log("\n📝 步骤 2: 填充示例数据");
     console.log("─────────────────────");
@@ -119,8 +118,7 @@ async function main() {
         "投稿人": "投稿者A",
         "日期": "2024.03.15",
         "地点ID": "lib-001",
-        "地点名称": "图书馆",
-        "状态": "已发布"
+        "地点名称": "图书馆"
       },
       {
         "Text": "故事002",
@@ -132,8 +130,7 @@ async function main() {
         "投稿人": "投稿者B",
         "日期": "2024.06.20",
         "地点ID": "lib-001",
-        "地点名称": "图书馆",
-        "状态": "已发布"
+        "地点名称": "图书馆"
       },
       {
         "Text": "故事003",
@@ -145,8 +142,7 @@ async function main() {
         "投稿人": "投稿者C",
         "日期": "2024.04.10",
         "地点ID": "lake-001",
-        "地点名称": "东坡湖",
-        "状态": "已发布"
+        "地点名称": "东坡湖"
       }
     ];
 
@@ -158,7 +154,7 @@ async function main() {
     }
 
     console.log("\n✨ 初始化完成！");
-    console.log("📊 已创建 10 个字段");
+    console.log("📊 已创建 9 个字段");
     console.log(`📝 已添加 ${sampleRecords.length} 条示例记录`);
 
   } catch (error) {

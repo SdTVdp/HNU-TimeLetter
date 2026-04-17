@@ -39,7 +39,7 @@ export function StoryCardStack({ stories, activeIndices, onSwipe, onSelect }: St
     useEffect(() => {
         stories.forEach((story) => {
             const img = new Image();
-            img.src = story.mainImageUrl;
+            img.src = getStoryMainImageUrl(story);
         });
     }, [stories]);
 

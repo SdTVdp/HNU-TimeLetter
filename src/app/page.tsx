@@ -22,6 +22,15 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
   }, []);
+  useEffect(() => {
+    document.documentElement.classList.add('home-scrollbar-hidden');
+    document.body.classList.add('home-scrollbar-hidden');
+
+    return () => {
+      document.documentElement.classList.remove('home-scrollbar-hidden');
+      document.body.classList.remove('home-scrollbar-hidden');
+    };
+  }, []);
 
   useEffect(() => {
     if (isEnvelopeOpened && isTransitioning) {

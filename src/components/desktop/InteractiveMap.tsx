@@ -77,7 +77,7 @@ export function InteractiveMap() {
    * rollOffset: clipPath 动画的裁剪量 (像素)
    * = 容器宽度 - STRIP_WIDTH
    * 使用数值而非 calc() 字符串，保证 Framer Motion 插值可靠
-   */
+  */
   const [rollOffset, setRollOffset] = useState(0);
 
   const handleContainerResize = useCallback(({ width }: { width: number; height: number }) => {

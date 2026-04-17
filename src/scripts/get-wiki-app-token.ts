@@ -3,7 +3,7 @@ import { resolveFeishuTableLink } from '@/server/feishu/wiki';
 
 function normalizePrefix(prefix: string): string {
   const trimmed = prefix.trim().replace(/_+$/, '');
-  return trimmed || 'FEISHU_EXHIBITION';
+  return trimmed || 'FEISHU_TABLE';
 }
 
 async function main() {
@@ -11,10 +11,9 @@ async function main() {
 
   const rawLink =
     process.argv[2]?.trim() ||
-    process.env.FEISHU_EXHIBITION_WIKI_URL?.trim() ||
     process.env.FEISHU_WIKI_URL?.trim();
   const outputPrefix = normalizePrefix(
-    process.argv[3] ?? process.env.FEISHU_OUTPUT_PREFIX ?? 'FEISHU_EXHIBITION'
+    process.argv[3] ?? process.env.FEISHU_OUTPUT_PREFIX ?? 'FEISHU_TABLE'
   );
 
   if (!rawLink) {

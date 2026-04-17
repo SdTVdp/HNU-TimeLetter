@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
 import { X, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';

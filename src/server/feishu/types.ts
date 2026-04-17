@@ -17,15 +17,6 @@ export interface FeishuConnectionSettings {
   feishuAppToken?: string;
   feishuTableId?: string;
   feishuViewId?: string;
-  feishuExhibitionWikiUrl?: string;
-  feishuExhibitionAppToken?: string;
-  feishuExhibitionTableId?: string;
-  feishuExhibitionViewId?: string;
-  feishuCardWikiUrl?: string;
-  feishuCardAppToken?: string;
-  feishuCardTableId?: string;
-  feishuCardViewId?: string;
-  feishuCardIdFieldName?: string;
   feishuLocationsTableId?: string;
   feishuOssTableId?: string;
   ossRegion?: string;

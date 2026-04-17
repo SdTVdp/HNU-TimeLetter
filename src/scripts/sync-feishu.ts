@@ -1,20 +1,23 @@
-import { loadWorkspaceEnv, getEnvSettings } from '@/server/feishu/config';
-import { runFeishuSync } from '@/server/feishu/sync';
+import { syncFeishuData } from '../lib/sync-service';
 
 async function main() {
   try {
-    loadWorkspaceEnv(process.cwd());
-
-    console.log('Starting Feishu sync...\n');
-    const result = await runFeishuSync(getEnvSettings(), process.cwd());
-
-    console.log(
-      `Synced ${result.locationCount} locations / ${result.storyCount} stories`
-    );
+    const result = await syncFeishuData();
+    if (result.success) {
+      console.log(result.message);
+      if (result.data) {
+        console.log(
+          `地点数: ${result.data.locationCount}, 故事数: ${result.data.storyCount}, 创作记录数: ${result.data.creationIdeaCount}`
+        );
+      }
+    } else {
+      console.error(result.message);
+      process.exit(1);
+    }
   } catch (error) {
-    console.error('\nSync failed:', error);
+    console.error('同步失败:', error);
     process.exit(1);
   }
 }
 
-void main();
+main();

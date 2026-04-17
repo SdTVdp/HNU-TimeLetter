@@ -199,6 +199,17 @@ html.lenis::-webkit-scrollbar {
   display: none !important;
 }
 
+html.home-scrollbar-hidden,
+body.home-scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html.home-scrollbar-hidden::-webkit-scrollbar,
+body.home-scrollbar-hidden::-webkit-scrollbar {
+  display: none !important;
+}
+
 @layer utilities {
   .hero-ribbon-clip {
     clip-path: inset(0% 0% 100% 0%);

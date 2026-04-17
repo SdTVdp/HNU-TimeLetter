@@ -55,9 +55,10 @@ interface UseContainedMapSizeOptions {
 export function useContainedMapSize(
   containerRef: RefObject<HTMLElement | null>,
   mapAspect: number | null,
-  options?: UseContainedMapSizeOptions
+  options: UseContainedMapSizeOptions = {}
 ) {
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
+  const { onContainerResize, shouldMeasure } = options;
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -67,10 +68,10 @@ export function useContainedMapSize(
       const { width, height } = container.getBoundingClientRect();
       if (!width || !height) return;
 
-      options?.onContainerResize?.({ width, height });
+      onContainerResize?.({ width, height });
 
       if (!mapAspect) return;
-      if (options?.shouldMeasure && !options.shouldMeasure()) return;
+      if (shouldMeasure && !shouldMeasure()) return;
 
       setMapSize(fitContainedSize(width, height, mapAspect));
     };
@@ -80,7 +81,7 @@ export function useContainedMapSize(
     observer.observe(container);
 
     return () => observer.disconnect();
-  }, [containerRef, mapAspect, options]);
+  }, [containerRef, mapAspect, onContainerResize, shouldMeasure]);
 
   return mapSize;
 }
