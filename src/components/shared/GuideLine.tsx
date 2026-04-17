@@ -37,6 +37,9 @@ import { useEffect, useRef, useCallback, useState } from 'react';
  *    避免覆盖 QQ 交流群 / HIMEMATSU / 版权条。
  *  - 配合 `overflow: hidden`，任何超出底边的描边（包括 P6 圆角端点的外沿）都会被
  *    SVG 视口硬裁剪。
+ *  - 因此 P6 故意放在 `crBottom + 80`（超出蒙版底边 56px），让 stroke 主体而非
+ *    仅仅圆角帽填满蒙版底边——这样不管 P5→P6 的角度，尾部视觉均硬齐
+ *    到 `crBottom + 24`（红带内 24px），不再出现"有地方没碰到"。
  */
 
 interface GuideLineProps {
@@ -96,11 +99,13 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
     const p4 = { x: vw * 1.075, y: apTop + apH * 0.4043 };
     // P5 在鸣谢页（跨越了关于我们页面）
     const p5 = { x: vw * -0.0219, y: crTop + crH * 0.654 };
-    // P6: 位于鸣谢页底部之上 3%（~30px），加上圆角端点（stroke 100px → 端点半径 50px，
-    //     在此向下方向实际延伸 ~28px）后刚好触达页脚红色区域顶边，保证页脚文字
-    //     （QQ 交流群 / HIMEMATSU / 版权条）有安全留白。
-    //     之前用 1.03 时端点落在 footer 内 27px，cap 又 +28px 压住了 "QQ 交流群" 行。
-    const p6 = { x: vw * 0.32, y: crTop + crH * 0.97 };
+    // P6: 故意推到 `crBottom + 80`，远在蒙版底边 (`crBottom + 24`) 之下。
+    //     既然 SVG 的 `overflow: hidden` 硬裁剪，超过蒙版的部分一律不渲染；
+    //     把线条终点放到蒙版外，能保证 stroke 主体（100px 宽）填满整个蒙版
+    //     底边，不管 P5→P6 的角度，尾部视觉上都确实抵达页脚红带。
+    //     之前 0.97*crH 是在 credits 内部结束，导致线未期同蒙版底边齐平、视觉上
+    //     "没碰到页脚"。
+    const p6 = { x: vw * 0.32, y: crTop + crH + 80 };
 
     // SVG 覆盖范围：蒙版裁剪盒。
     //   顶边：P1 上方 60px（容纳 stroke 圆角端点，使引导线从丝带下方长出）
