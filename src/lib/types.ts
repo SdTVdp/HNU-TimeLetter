@@ -32,6 +32,25 @@ export interface CreationIdea {
   tags: string[];
 }
 
+// 创作公示板 — 卡片内部的一条原始记录展示项
+export interface CreationEntry {
+  id: string;
+  cardId: string;
+  author: string;
+  tags: string;        // 单个胶囊标签值
+  content: string;
+  images: string[];
+  createdAt: string;
+}
+
+// 创作公示板 — 按 CardID 聚合后的卡片级渲染单元
+export interface CreationCard {
+  id: string;
+  cardId: string;
+  addIdeaUrl: string;
+  entries: CreationEntry[];
+}
+
 // 地点实体 (前端聚合用)
 export interface LocationPoint {
   id: string;
