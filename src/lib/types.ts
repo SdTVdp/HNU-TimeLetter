@@ -17,6 +17,21 @@ export interface Story {
   locationName?: string;
 }
 
+// 创作公示板实体 (对应揭示板表中的一行展示记录)
+export interface CreationIdea {
+  id: string;
+  cardId: string;
+  title: string;
+  contentType: string;
+  content: string;
+  author: string;
+  images: string[];
+  createdAt: string;
+  sourceIdeaId: string | null;
+  sourceIdeaTitle: string | null;
+  tags: string[];
+}
+
 // 地点实体 (前端聚合用)
 export interface LocationPoint {
   id: string;

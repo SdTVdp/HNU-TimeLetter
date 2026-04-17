@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import OSS from 'ali-oss';
-import type { LocationPoint, Story } from './types';
+import type { CreationIdea, LocationPoint, Story } from './types';
 import locationsConfig from '../config/locations.json';
 
 // Ensure env is loaded
@@ -28,6 +28,8 @@ type SyncConfig = {
   feishuAppToken?: string;
   feishuTableId?: string;
   feishuViewId?: string;
+  feishuCreationTableId?: string;
+  feishuCreationViewId?: string;
   feishuOssTableId: string;
   feishuLocationsTableId: string;
   ossRegion?: string;
@@ -42,6 +44,8 @@ const syncConfig: SyncConfig = {
   feishuAppToken: process.env.FEISHU_APP_TOKEN,
   feishuTableId: process.env.FEISHU_TABLE_ID,
   feishuViewId: process.env.FEISHU_VIEW_ID,
+  feishuCreationTableId: process.env.FEISHU_CREATION_TABLE_ID || 'tblKNYCf641UMSUe',
+  feishuCreationViewId: process.env.FEISHU_CREATION_VIEW_ID || 'vewbLA6eBY',
   feishuOssTableId: 'tblwLUNdWNzv1kZw',
   feishuLocationsTableId: 'tblaMWD1PV9lwXDr',
   ossRegion: process.env.ALIYUN_OSS_REGION,
@@ -78,6 +82,74 @@ const getText = (field: unknown): string => {
   return String(field);
 };
 
+const getPersonName = (field: unknown): string => {
+  if (!Array.isArray(field) || field.length === 0) return '';
+  const first = field[0];
+  if (!first || typeof first !== 'object' || !('name' in first)) return '';
+  const name = (first as { name?: unknown }).name;
+  return typeof name === 'string' ? name : '';
+};
+
+const getAttachments = (field: unknown): FeishuAttachment[] => {
+  if (!Array.isArray(field)) return [];
+
+  return field.filter((item): item is FeishuAttachment => {
+    return Boolean(item && typeof item === 'object' && ('file_token' in item || 'token' in item));
+  });
+};
+
+const formatDateTime = (value: unknown): string => {
+  if (typeof value === 'number') {
+    return new Date(value).toISOString();
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const asNumber = Number(value);
+    if (!Number.isNaN(asNumber) && /^\d+$/.test(value.trim())) {
+      return new Date(asNumber).toISOString();
+    }
+    return value;
+  }
+
+  return '';
+};
+
+const mergeTextWithUrls = (text: string, urls: string[]): string => {
+  if (urls.length === 0) return text;
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  urls.forEach((url) => {
+    if (!lines.includes(url)) {
+      lines.push(url);
+    }
+  });
+
+  return lines.join('\n');
+};
+
+const extractUrlsFromText = (text: string): string[] => {
+  if (!text) return [];
+  const matches = text.match(/https?:\/\/\S+/g);
+  return matches ? [...new Set(matches)] : [];
+};
+
+const deriveCreationTitle = (contentType: string, content: string, fallbackId: string, imageNames: string[]): string => {
+  const textWithoutUrls = content.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
+  if (textWithoutUrls) {
+    return textWithoutUrls.length > 32 ? `${textWithoutUrls.slice(0, 32)}…` : textWithoutUrls;
+  }
+
+  if (imageNames.length > 0) {
+    return imageNames[0];
+  }
+
+  return `${contentType || '创作'} ${fallbackId}`;
+};
+
 const fileWriter = {
   writeLocationConfig(data: LocationCoords): void {
     const outputPath = path.resolve(process.cwd(), 'src/config/locations.json');
@@ -92,6 +164,15 @@ const fileWriter = {
     fs.writeFileSync(outputPath, content, 'utf-8');
     console.log(`\n✅ 数据已写入: ${outputPath}`);
     console.log(`📊 共 ${data.length} 个地点，${data.reduce((sum, loc) => sum + loc.stories.length, 0)} 个故事`);
+  },
+
+  writeCreationBoard(data: CreationIdea[]): void {
+    const outputPath = path.resolve(process.cwd(), 'src/data/creation-board.json');
+    const content = JSON.stringify({ ideas: data }, null, 2);
+
+    fs.writeFileSync(outputPath, content, 'utf-8');
+    console.log(`✅ 创作公示板数据已写入: ${outputPath}`);
+    console.log(`📌 共 ${data.length} 条创作记录`);
   },
 };
 
@@ -250,15 +331,14 @@ const feishuClient = {
     }
   },
 
-  async updateRecordOssUrl(token: string, recordId: string, avatarOssUrl: string, mainImageOssUrl: string): Promise<void> {
-    if (!syncConfig.feishuAppToken || !syncConfig.feishuTableId) return;
-
-    const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${syncConfig.feishuAppToken}/tables/${syncConfig.feishuTableId}/records/${recordId}`;
-
-    const fields: Record<string, string> = {};
-    if (avatarOssUrl) fields['头像OSS_URL'] = avatarOssUrl;
-    if (mainImageOssUrl) fields['大图OSS_URL'] = mainImageOssUrl;
-    if (Object.keys(fields).length === 0) return;
+  async updateRecordFields(
+    token: string,
+    appToken: string,
+    tableId: string,
+    recordId: string,
+    fields: Record<string, unknown>
+  ): Promise<void> {
+    const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`;
 
     const response = await fetch(url, {
       method: 'PUT',
@@ -273,11 +353,22 @@ const feishuClient = {
     if (data.code !== 0) {
       console.error(`  ⚠️  更新记录失败: ${data.msg}`);
     } else {
-      console.log('  ✅ 已回写 OSS URL 到飞书');
+      console.log('  ✅ 已回写字段到飞书');
     }
   },
 
-  async fetchRecords(token: string): Promise<FeishuRecord[]> {
+  async updateStoryRecordOssUrl(token: string, recordId: string, avatarOssUrl: string, mainImageOssUrl: string): Promise<void> {
+    if (!syncConfig.feishuAppToken || !syncConfig.feishuTableId) return;
+
+    const fields: Record<string, string> = {};
+    if (avatarOssUrl) fields['头像OSS_URL'] = avatarOssUrl;
+    if (mainImageOssUrl) fields['大图OSS_URL'] = mainImageOssUrl;
+    if (Object.keys(fields).length === 0) return;
+
+    await this.updateRecordFields(token, syncConfig.feishuAppToken, syncConfig.feishuTableId, recordId, fields);
+  },
+
+  async fetchStoryRecords(token: string): Promise<FeishuRecord[]> {
     if (!syncConfig.feishuAppToken || !syncConfig.feishuTableId) {
       throw new Error('缺少飞书表格配置');
     }
@@ -290,16 +381,6 @@ const feishuClient = {
     while (hasMore) {
       const body: Record<string, unknown> = {
         page_size: 500,
-        filter: {
-          conjunction: 'and',
-          conditions: [
-            {
-              field_name: '状态',
-              operator: 'is',
-              value: ['已发布'],
-            },
-          ],
-        },
       };
 
       if (syncConfig.feishuViewId) {
@@ -321,6 +402,51 @@ const feishuClient = {
       const data = await response.json();
       if (data.code !== 0) {
         throw new Error(`拉取飞书数据失败: ${data.msg} (code: ${data.code})`);
+      }
+
+      allItems.push(...((data.data.items || []) as FeishuRecord[]));
+      hasMore = data.data.has_more || false;
+      pageToken = data.data.page_token || '';
+    }
+
+    return allItems;
+  },
+
+  async fetchCreationRecords(token: string): Promise<FeishuRecord[]> {
+    if (!syncConfig.feishuAppToken || !syncConfig.feishuCreationTableId) {
+      throw new Error('缺少创作公示板表格配置');
+    }
+
+    const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${syncConfig.feishuAppToken}/tables/${syncConfig.feishuCreationTableId}/records/search`;
+    const allItems: FeishuRecord[] = [];
+    let hasMore = true;
+    let pageToken = '';
+
+    while (hasMore) {
+      const body: Record<string, unknown> = {
+        page_size: 500,
+      };
+
+      if (syncConfig.feishuCreationViewId) {
+        body.view_id = syncConfig.feishuCreationViewId;
+      }
+
+      if (pageToken) {
+        body.page_token = pageToken;
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+      if (data.code !== 0) {
+        throw new Error(`拉取创作公示板数据失败: ${data.msg} (code: ${data.code})`);
       }
 
       allItems.push(...((data.data.items || []) as FeishuRecord[]));
@@ -384,35 +510,51 @@ const feishuClient = {
 };
 
 /** ------------------------- 应用层：数据转换 ------------------------- */
-async function processAttachment(token: string, attachmentField: unknown, usage: string, recordId: string): Promise<string> {
-  if (!ossService.client || !attachmentField || !Array.isArray(attachmentField) || attachmentField.length === 0) {
-    return '';
+async function processAttachments(
+  token: string,
+  attachmentField: unknown,
+  usage: string,
+  recordId: string
+): Promise<{ urls: string[]; names: string[] }> {
+  if (!ossService.client) {
+    return { urls: [], names: [] };
   }
 
-  const firstAttachment = attachmentField[0] as FeishuAttachment;
-  const fileToken = firstAttachment.file_token || firstAttachment.token;
-  const fileName = firstAttachment.name || 'image.jpg';
-  if (!fileToken) return '';
-
-  try {
-    const buffer = await feishuClient.downloadAttachment(token, fileToken);
-    const { url, path: ossPath, hash } = await ossService.upload(buffer, fileName);
-
-    await feishuClient.recordOssFile(token, {
-      fileName,
-      ossPath,
-      ossUrl: url,
-      hash,
-      fileSize: buffer.length,
-      usage,
-      recordId,
-    });
-
-    return url;
-  } catch (error) {
-    console.error('  ⚠️ 处理附件失败:', error);
-    return '';
+  const attachments = getAttachments(attachmentField);
+  if (attachments.length === 0) {
+    return { urls: [], names: [] };
   }
+
+  const urls: string[] = [];
+  const names: string[] = [];
+
+  for (const attachment of attachments) {
+    const fileToken = attachment.file_token || attachment.token;
+    const fileName = attachment.name || 'image.jpg';
+    if (!fileToken) continue;
+
+    try {
+      const buffer = await feishuClient.downloadAttachment(token, fileToken);
+      const { url, path: ossPath, hash } = await ossService.upload(buffer, fileName);
+
+      await feishuClient.recordOssFile(token, {
+        fileName,
+        ossPath,
+        ossUrl: url,
+        hash,
+        fileSize: buffer.length,
+        usage,
+        recordId,
+      });
+
+      urls.push(url);
+      names.push(fileName);
+    } catch (error) {
+      console.error('  ⚠️ 处理附件失败:', error);
+    }
+  }
+
+  return { urls, names };
 }
 
 const dataTransformer = {
@@ -437,7 +579,8 @@ const dataTransformer = {
           if (ossService.client) {
             if (!avatarUrl && fields['头像']) {
               console.log('  📥 处理头像附件...');
-              const newUrl = await processAttachment(token, fields['头像'], '头像', record.record_id);
+              const { urls } = await processAttachments(token, fields['头像'], '头像', record.record_id);
+              const newUrl = urls[0] || '';
               if (newUrl) {
                 avatarUrl = newUrl;
                 hasNewUpload = true;
@@ -446,7 +589,8 @@ const dataTransformer = {
 
             if (!mainImageUrl && fields['大图']) {
               console.log('  📥 处理大图附件...');
-              const newUrl = await processAttachment(token, fields['大图'], '大图', record.record_id);
+              const { urls } = await processAttachments(token, fields['大图'], '大图', record.record_id);
+              const newUrl = urls[0] || '';
               if (newUrl) {
                 mainImageUrl = newUrl;
                 hasNewUpload = true;
@@ -454,7 +598,7 @@ const dataTransformer = {
             }
 
             if (hasNewUpload) {
-              await feishuClient.updateRecordOssUrl(token, record.record_id, avatarUrl, mainImageUrl);
+              await feishuClient.updateStoryRecordOssUrl(token, record.record_id, avatarUrl, mainImageUrl);
             }
           } else {
             if (!avatarUrl) avatarUrl = getText(fields['头像URL']);
@@ -508,10 +652,82 @@ const dataTransformer = {
 
     return locations;
   },
+
+  async transformCreationRecords(token: string, feishuRecords: FeishuRecord[]): Promise<CreationIdea[]> {
+    const contentTypeFieldName = '请选择你要添加的内容（该表可重复提交，如需填写多项，请再次提交）';
+    const BATCH_SIZE = 5;
+    const ideas: CreationIdea[] = [];
+
+    for (let i = 0; i < feishuRecords.length; i += BATCH_SIZE) {
+      const batch = feishuRecords.slice(i, i + BATCH_SIZE);
+
+      const processedBatch = await Promise.all(
+        batch.map(async (record) => {
+          const fields = record.fields;
+          const cardId = getText(fields['CardID']) || getText(fields['自动编号']) || record.record_id;
+          const contentType = getText(fields[contentTypeFieldName]);
+          const author = getText(fields['你的昵称']) || getPersonName(fields['提交人']);
+          const existingText = getText(fields['文本']).trim();
+          const attachmentNames = getAttachments(fields['请上传你的图片']).map((attachment) => attachment.name || 'image.jpg');
+
+          console.log(`\n📌 处理创作记录: ${cardId} (${contentType || '未分类'})`);
+
+          let imageUrls = extractUrlsFromText(existingText);
+          let imageNames = attachmentNames;
+
+          if (fields['请上传你的图片'] && imageUrls.length < attachmentNames.length) {
+            console.log('  📥 处理参考图附件...');
+            const result = await processAttachments(token, fields['请上传你的图片'], '创作公示板参考图', record.record_id);
+            imageUrls = [...new Set([...imageUrls, ...result.urls])];
+            imageNames = result.names.length > 0 ? result.names : attachmentNames;
+          }
+
+          const mergedText = mergeTextWithUrls(existingText, imageUrls);
+          if (
+            mergedText !== existingText &&
+            syncConfig.feishuAppToken &&
+            syncConfig.feishuCreationTableId
+          ) {
+            console.log('  📝 回填参考图 OSS 链接到文本字段...');
+            await feishuClient.updateRecordFields(
+              token,
+              syncConfig.feishuAppToken,
+              syncConfig.feishuCreationTableId,
+              record.record_id,
+              { 文本: mergedText }
+            );
+          }
+
+          return {
+            id: record.record_id,
+            cardId,
+            title: deriveCreationTitle(contentType, mergedText || existingText, cardId, imageNames),
+            contentType,
+            content: mergedText || existingText,
+            author,
+            images: imageUrls,
+            createdAt: formatDateTime(fields['提交时间']),
+            sourceIdeaId: null,
+            sourceIdeaTitle: null,
+            tags: contentType ? [contentType] : [],
+          } satisfies CreationIdea;
+        })
+      );
+
+      ideas.push(...processedBatch);
+    }
+
+    ideas.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return ideas;
+  },
 };
 
 /** ------------------------- 主流程 ------------------------- */
-export async function syncFeishuData(): Promise<{ success: boolean; message: string; data?: { locationCount: number; storyCount: number } }> {
+export async function syncFeishuData(): Promise<{
+  success: boolean;
+  message: string;
+  data?: { locationCount: number; storyCount: number; creationIdeaCount: number };
+}> {
   try {
     console.log('🚀 开始同步飞书数据...\n');
 
@@ -523,25 +739,35 @@ export async function syncFeishuData(): Promise<{ success: boolean; message: str
     locationCoords = await feishuClient.fetchLocations(token);
     console.log(`✅ 加载了 ${Object.keys(locationCoords).length} 个地点配置\n`);
 
-    console.log('📥 拉取飞书记录...');
-    const feishuRecords = await feishuClient.fetchRecords(token);
-    console.log(`✅ 成功拉取 ${feishuRecords.length} 条记录\n`);
+    console.log('📥 拉取故事记录...');
+    const feishuRecords = await feishuClient.fetchStoryRecords(token);
+    console.log(`✅ 成功拉取 ${feishuRecords.length} 条故事记录\n`);
 
-    console.log('🔄 转换数据格式并处理图片...');
+    console.log('📥 拉取创作公示板记录...');
+    const creationRecords = await feishuClient.fetchCreationRecords(token);
+    console.log(`✅ 成功拉取 ${creationRecords.length} 条创作记录\n`);
+
+    console.log('🔄 转换故事数据并处理图片...');
     const locations = await dataTransformer.transformRecords(token, feishuRecords, locationCoords);
-    console.log('\n✅ 转换完成\n');
+    console.log('\n✅ 故事数据转换完成\n');
+
+    console.log('🔄 转换创作公示板数据并处理参考图...');
+    const creationIdeas = await dataTransformer.transformCreationRecords(token, creationRecords);
+    console.log('\n✅ 创作公示板转换完成\n');
 
     console.log('💾 写入本地文件...');
     fileWriter.writeContent(locations);
+    fileWriter.writeCreationBoard(creationIdeas);
 
     const storyCount = locations.reduce((sum, loc) => sum + loc.stories.length, 0);
     const locationCount = locations.length;
+    const creationIdeaCount = creationIdeas.length;
     console.log('\n✨ 同步完成！');
 
     return {
       success: true,
       message: '同步完成',
-      data: { locationCount, storyCount },
+      data: { locationCount, storyCount, creationIdeaCount },
     };
   } catch (error) {
     console.error('\n❌ 同步失败:', error);

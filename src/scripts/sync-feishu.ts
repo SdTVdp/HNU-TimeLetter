@@ -6,7 +6,9 @@ async function main() {
     if (result.success) {
       console.log(result.message);
       if (result.data) {
-        console.log(`地点数: ${result.data.locationCount}, 故事数: ${result.data.storyCount}`);
+        console.log(
+          `地点数: ${result.data.locationCount}, 故事数: ${result.data.storyCount}, 创作记录数: ${result.data.creationIdeaCount}`
+        );
       }
     } else {
       console.error(result.message);
