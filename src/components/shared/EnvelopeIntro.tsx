@@ -202,6 +202,7 @@ export function EnvelopeIntro() {
   const { setEnvelopeOpened, setTransitioning } = useAppStore();
   const [phase, setPhase] = useState<Phase>('loading');
   const [ribbonRevealed, setRibbonRevealed] = useState(false);
+  const [titleVisible, setTitleVisible] = useState(false);
   const [isShattered, setIsShattered] = useState(false);
   const phaseRef = useRef<Phase>('loading');
 
@@ -219,23 +220,30 @@ export function EnvelopeIntro() {
   useEffect(() => {
     let cancelled = false;
     let frame2: number | undefined;
+    let titleTimer: ReturnType<typeof setTimeout> | undefined;
 
     const runEntry = async () => {
       if (cancelled) return;
       setPhase('entering');
       setRibbonRevealed(true);
 
+      // 标题在丝带 clip-path 动画（1400ms）结束后淡入
+      titleTimer = setTimeout(() => {
+        if (!cancelled) setTitleVisible(true);
+      }, 1400);
+
       if (prefersReducedMotion) {
         envelopeControls.set({ y: 0, opacity: 1, rotateX: 0, rotateZ: 0 });
-        if (!cancelled) setPhase('idle');
+        if (!cancelled) {
+          setTitleVisible(true);
+          setPhase('idle');
+        }
         return;
       }
 
-      // 丝带先出现（clip-path CSS 动画 1.4s），信封延迟 1.5s 后飘落
-      await sleep(1500);
       if (cancelled || phaseRef.current === 'opening') return;
 
-      // 信封入场：使用 spring 物理弹簧实现丝滑飘落
+      // 信封与丝带同时以 Spring 物理弹簧自上方飘落
       // 从屏幕上方 120% 处下落，带左右摇摆的飘落感
       await envelopeControls.start({
         y: 0,
@@ -279,6 +287,7 @@ export function EnvelopeIntro() {
       cancelled = true;
       cancelAnimationFrame(frame1);
       if (frame2 !== undefined) cancelAnimationFrame(frame2);
+      if (titleTimer !== undefined) clearTimeout(titleTimer);
     };
   }, [envelopeControls, prefersReducedMotion]);
 
@@ -369,13 +378,12 @@ export function EnvelopeIntro() {
             animate={
               isOpening
                 ? { opacity: 0, y: -40, filter: 'blur(8px)' }
-                : isIdle
+                : titleVisible
                   ? { opacity: 1, y: 0, filter: 'blur(0px)' }
                   : { opacity: 0, y: 0, filter: 'blur(0px)' }
             }
             transition={{
               duration: isOpening ? 0.6 : 0.8,
-              delay: isIdle && !isOpening ? 0.15 : 0,
               ease: [0.85, 0, 0.15, 1],
             }}
           >
