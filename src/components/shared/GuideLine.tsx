@@ -47,6 +47,19 @@ interface GuideLineProps {
   sectionRefs: React.RefObject<HTMLDivElement | null>[];
 }
 
+/**
+ * 路径分段缓存：用于 y-aware 进度映射。每段保存起止 y、累积长度。
+ * y 为 ScrollSections 容器内坐标系。
+ * 最后一段（P5→P6）的 y1 已被 clamp 到 svgBottom（= 鸣谢页底边）：P6 实际在
+ * 蒙版底下方 80px，clamp 保证"view.bottom == 鸣谢底边" 时进度 = 1.0。
+ */
+interface PathSegment {
+  y0: number;
+  y1: number;
+  len0: number;
+  len1: number;
+}
+
 export function GuideLine({ sectionRefs }: GuideLineProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
@@ -54,6 +67,10 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
   const [svgDimensions, setSvgDimensions] = useState({ top: 0, height: 0 });
   const totalLengthRef = useRef(0);
   const cachedMaxProgress = useRef(0);
+  // y-aware 映射所需数据
+  const segmentsRef = useRef<PathSegment[]>([]);
+  const containerTopRef = useRef(0);
+  const svgBottomRef = useRef(0);
 
   /**
    * 根据三个 section 的实际 DOM 位置计算 SVG 路径坐标
@@ -80,12 +97,6 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
     const crTop = crRect.top + window.scrollY - containerTop;
     const crH = crRect.height;
 
-    // Footer 第一个链接文本顶边相对 footer 顶边的偏移：
-    //   nav.py-5 (20px) + a.py-3.5 (14px) = 34px。由 Footer.tsx 布局静态推导，
-    //   不测量 DOM（Footer 是 position:fixed，getBoundingClientRect 给出视区相对坐标，
-    //   无法直接转换到容器文档流坐标系）。
-    const FOOTER_TEXT_TOP_OFFSET = 34;
-
     // 丝带水平中心：丝带位于 col-start-1（0~20%vw）的 flex justify-end 内，宽 100px。
     // 所以丝带中心 x = 20%vw - 50px（响应式，任意屏宽均与丝带精确对齐）。
     const ribbonX = vw * 0.2 - 50;
@@ -109,10 +120,11 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
 
     // SVG 覆盖范围：蒙版裁剪盒。
     //   顶边：P1 上方 60px（容纳 stroke 圆角端点，使引导线从丝带下方长出）
-    //   底边：footer 首条链接文本顶边 - 10px安全间隙。采用静态偏移而非 DOM 测量，
-    //        避免对 position:fixed footer 用错误的坐标转换公式。
+    //   底边：鸣谢页底边 = footer 顶边（交界线）。不再额外 +偏移，保证蒙版
+    //        与交界线严格平齐。P6 故意在交界线下方 80px，stroke 主体由蒙版
+    //        硬裁剪，尾部视觉上刚好停在交界线。
     const svgTop = p1.y - 60;
-    const svgBottom = crTop + crH + FOOTER_TEXT_TOP_OFFSET - 10;
+    const svgBottom = crTop + crH;
     const svgHeight = svgBottom - svgTop;
 
     // 所有 Y 坐标相对于 SVG 顶部
@@ -137,6 +149,26 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
       `L ${lp5.x} ${lp5.y}`,
       `L ${lp6.x} ${lp6.y}`,
     ].join(' ');
+
+    // y-aware 进度映射所需的段信息：每段 (y0, y1, len0, len1) 全部在容器坐标系
+    // 使用真实几何（不 clamp y1）：drawn 终点精确落在 refY 对应的路径点上。
+    // svgBottom（= 鸣谢底 = 交界线）由 animate() 里做 snap：一旦 refY >= svgBottom
+    // 就强制 progress = 1；视觉上这一跳被蒙版遮住（新画的 80px 都在蒙版下）。
+    const pts = [p1, p2, p3, p4, p5, p6];
+    const segs: PathSegment[] = [];
+    let cum = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const seg = Math.sqrt(dx * dx + dy * dy);
+      segs.push({ y0: a.y, y1: b.y, len0: cum, len1: cum + seg });
+      cum += seg;
+    }
+    segmentsRef.current = segs;
+    containerTopRef.current = containerTop;
+    svgBottomRef.current = svgBottom;
 
     setPathD(d);
     setSvgDimensions({ top: svgTop, height: svgHeight });
@@ -165,29 +197,77 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
   useEffect(() => {
     if (!pathD) return;
 
-    const aboutProject = sectionRefs[0]?.current;
-    const credits = sectionRefs[2]?.current;
-    if (!aboutProject || !credits) return;
-
     let rafId: number;
 
     const animate = () => {
       const path = pathRef.current;
-      if (!path || totalLengthRef.current === 0) {
+      const segs = segmentsRef.current;
+      if (!path || totalLengthRef.current === 0 || segs.length === 0) {
         rafId = requestAnimationFrame(animate);
         return;
       }
 
       const scrollY = window.scrollY;
       const vp = window.innerHeight;
+      const containerTop = containerTopRef.current;
+      const svgBottom = svgBottomRef.current;
 
-      const apRect = aboutProject.getBoundingClientRect();
-      const crRect = credits.getBoundingClientRect();
-      const startY = apRect.top + scrollY - vp;
-      const endY = crRect.top + scrollY + crRect.height;
+      // y-aware 进度映射：让画出的线尾跟随"视口某一 y 基准线在路径上的 y 位置"
+      //
+      // 之前的线性映射（progress = (scrollY - startY) / (endY - startY) → drawn = progress * totalLength）
+      // 在路径几何不均匀时会出现"线头走在视口下面"：
+      // ─ P1→P4 段（小 y 范围 ~13%）占了 ~28% 路径长度 → 密集区
+      // ─ P4→P5 段（大 y 跨越 ~73%）占了 ~58% 路径长度 → 稀疏区
+      // 线性映射在中段滚动时会把 drawn-end 推到远比视口底低的 y。
+      //
+      // 改用 refY = scrollY + vp*anchor（文档坐标）后减去 containerTop 转到容器坐标系，
+      // 再在折线上查找这个 y 对应的长度。drawn 终点精确落在 refY 对应的路径点上。
+      //
+      // 三段 anchor 策略（用 max-merge 让它们平滑衔接）：
+      // ─ 启动（scrollY <= STARTUP_END）：跟视口底（anchor=1.0），保证微量下滑时
+      //   线立即从丝带下方伸出。超过 STARTUP_END 后冻结这个分量（不再推进），
+      //   仅靠 mid 段驱动；用户继续滚动时尾部的视觉 y 从视口底自然上升到 60%，
+      //   无跳跃（因为 drawn 在 cachedMax 下保持不变，滚动只改变相对视口 y）。
+      // ─ 中段（STARTUP_END < scrollY < TRANSITION_START）：anchor=0.6 锁在视口 60%。
+      // ─ 触底（scrollY >= TRANSITION_START）：anchor 线性从 0.6 → 1.0，尾部下沉到
+      //   视口底与页脚交界线汇合；refY 越过 svgBottom 时 snap 到 100%，完成描边。
+      const STARTUP_END = 500; // 前 500px 滚动跟视口底，保证微量下滑线能冒出
+      const snapScroll = svgBottom - vp + containerTop; // viewBottom == svgBottom 时的 scrollY
+      const transitionStart = snapScroll * 0.7; // 最后 30% 滚动 anchor 过渡到 1.0
 
-      // 计算线性进度 0→1
-      const rawProgress = Math.max(0, Math.min(1, (scrollY - startY) / (endY - startY)));
+      let midAnchor = 0.6;
+      if (scrollY > transitionStart && snapScroll > transitionStart) {
+        const t = Math.min(1, (scrollY - transitionStart) / (snapScroll - transitionStart));
+        midAnchor = 0.6 + 0.4 * t;
+      }
+      const refY_mid = scrollY + vp * midAnchor - containerTop;
+
+      // 启动阶段用视口底 anchor=1.0；超过 STARTUP_END 后 scrollY 冻结在 STARTUP_END，
+      // 保证 refY_startup 不再增长，交棒给 refY_mid。
+      const startupScrollY = Math.min(scrollY, STARTUP_END);
+      const refY_startup = startupScrollY + vp - containerTop;
+
+      const lenAt = (y: number): number => {
+        if (y <= segs[0].y0) return 0;
+        for (const seg of segs) {
+          if (y <= seg.y1) {
+            const frac = (seg.y1 === seg.y0) ? 0 : (y - seg.y0) / (seg.y1 - seg.y0);
+            return seg.len0 + frac * (seg.len1 - seg.len0);
+          }
+        }
+        return segs[segs.length - 1].len1;
+      };
+
+      const segTotal = segs[segs.length - 1].len1;
+      let rawProgress = Math.max(lenAt(refY_mid), lenAt(refY_startup)) / segTotal;
+
+      // 最终 snap：视口底越过鸣谢底边（= 蒙版底 = 交界线）→ 线画完。
+      // 新增的 ~2% 路径全部在蒙版下方，被 overflow:hidden 裁掉，用户看不到跳。
+      const viewBottom = scrollY + vp - containerTop;
+      if (viewBottom >= svgBottom) {
+        rawProgress = 1;
+      }
+      rawProgress = Math.max(0, Math.min(1, rawProgress));
 
       // 非可逆：只取历史最大值（Math.max(cachedMaxScroll, currentScroll) 算法）
       cachedMaxProgress.current = Math.max(cachedMaxProgress.current, rawProgress);
