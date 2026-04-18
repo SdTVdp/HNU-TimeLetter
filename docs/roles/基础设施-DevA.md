@@ -85,7 +85,7 @@ src/
 1. **Auth**：使用飞书自建应用 `App ID` + `App Secret` 获取 `tenant_access_token`。
 2. **Fetch**：拉取 3 张多维表格：
    - `FEISHU_TABLE_ID` —— 首页故事表（按 `FEISHU_VIEW_ID` 过滤）。
-   - `feishuCreationTableId`（默认 `tblKNYCf641UMSUe`）—— 创作公示板（揭示板 / 收集结果）。
+   - `feishuCreationTableId`（可由 `FEISHU_CREATION_TABLE_ID` 覆盖）—— 创作公示板（揭示板 / 收集结果）。
    - `feishuLocationsTableId` —— 地点坐标配置。
 3. **Transform & Download**：
    - 将飞书原始数据清洗为 [数据模型](../architecture/数据模型.md) 中的 `Story / LocationPoint / CreationIdea`。
