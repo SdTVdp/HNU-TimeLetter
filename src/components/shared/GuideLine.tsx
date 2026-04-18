@@ -223,40 +223,51 @@ export function GuideLine({ sectionRefs }: GuideLineProps) {
       // 改用 refY = scrollY + vp*anchor（文档坐标）后减去 containerTop 转到容器坐标系，
       // 再在折线上查找这个 y 对应的长度。drawn 终点精确落在 refY 对应的路径点上。
       //
-      // anchor 策略：
-      // ─ 正常滚动：anchor = 0.6，尾部视觉上锁在视口 60% 位置（上半部偏下，不至于
-      //   甩出视口，也不会贴死视口底带来压迫感）。
-      // ─ 触底前 30% 行程：anchor 从 0.6 平滑过渡到 1.0，让线头在用户看到页脚时
-      //   自然下沉到视口底，配合 snap 完成最后 ~2% 描边（被蒙版裁掉看不到跳）。
-      //   这样既满足 60% 锁定，又让触底时引导线完整到达交界线与页脚衔接。
+      // 三段 anchor 策略（用 max-merge 让它们平滑衔接）：
+      // ─ 启动（scrollY <= STARTUP_END）：跟视口底（anchor=1.0），保证微量下滑时
+      //   线立即从丝带下方伸出。超过 STARTUP_END 后冻结这个分量（不再推进），
+      //   仅靠 mid 段驱动；用户继续滚动时尾部的视觉 y 从视口底自然上升到 60%，
+      //   无跳跃（因为 drawn 在 cachedMax 下保持不变，滚动只改变相对视口 y）。
+      // ─ 中段（STARTUP_END < scrollY < TRANSITION_START）：anchor=0.6 锁在视口 60%。
+      // ─ 触底（scrollY >= TRANSITION_START）：anchor 线性从 0.6 → 1.0，尾部下沉到
+      //   视口底与页脚交界线汇合；refY 越过 svgBottom 时 snap 到 100%，完成描边。
+      const STARTUP_END = 500; // 前 500px 滚动跟视口底，保证微量下滑线能冒出
       const snapScroll = svgBottom - vp + containerTop; // viewBottom == svgBottom 时的 scrollY
-      const transitionStart = snapScroll * 0.7; // 最后 30% 滚动内 anchor 过渡到 1.0
-      let anchor = 0.6;
+      const transitionStart = snapScroll * 0.7; // 最后 30% 滚动 anchor 过渡到 1.0
+
+      let midAnchor = 0.6;
       if (scrollY > transitionStart && snapScroll > transitionStart) {
         const t = Math.min(1, (scrollY - transitionStart) / (snapScroll - transitionStart));
-        anchor = 0.6 + 0.4 * t;
+        midAnchor = 0.6 + 0.4 * t;
       }
+      const refY_mid = scrollY + vp * midAnchor - containerTop;
 
-      const refY = scrollY + vp * anchor - containerTop;
-      let rawProgress: number;
-      if (refY >= svgBottom) {
-        // refY 已越过鸣谢底边（anchor 接近 1.0 且接近 snapScroll 时才发生）：
-        // snap 到 100%。新画的 ~115px 全部位于蒙版下方，被 overflow:hidden 裁掉，
-        // 用户看不到跳跃，只看到尾部稳定贴在交界线。
-        rawProgress = 1;
-      } else if (refY <= segs[0].y0) {
-        rawProgress = 0;
-      } else {
-        let lenAtRef = segs[segs.length - 1].len1;
+      // 启动阶段用视口底 anchor=1.0；超过 STARTUP_END 后 scrollY 冻结在 STARTUP_END，
+      // 保证 refY_startup 不再增长，交棒给 refY_mid。
+      const startupScrollY = Math.min(scrollY, STARTUP_END);
+      const refY_startup = startupScrollY + vp - containerTop;
+
+      const lenAt = (y: number): number => {
+        if (y <= segs[0].y0) return 0;
         for (const seg of segs) {
-          if (refY <= seg.y1) {
-            const frac = (refY - seg.y0) / (seg.y1 - seg.y0);
-            lenAtRef = seg.len0 + frac * (seg.len1 - seg.len0);
-            break;
+          if (y <= seg.y1) {
+            const frac = (seg.y1 === seg.y0) ? 0 : (y - seg.y0) / (seg.y1 - seg.y0);
+            return seg.len0 + frac * (seg.len1 - seg.len0);
           }
         }
-        rawProgress = Math.max(0, Math.min(1, lenAtRef / segs[segs.length - 1].len1));
+        return segs[segs.length - 1].len1;
+      };
+
+      const segTotal = segs[segs.length - 1].len1;
+      let rawProgress = Math.max(lenAt(refY_mid), lenAt(refY_startup)) / segTotal;
+
+      // 最终 snap：视口底越过鸣谢底边（= 蒙版底 = 交界线）→ 线画完。
+      // 新增的 ~2% 路径全部在蒙版下方，被 overflow:hidden 裁掉，用户看不到跳。
+      const viewBottom = scrollY + vp - containerTop;
+      if (viewBottom >= svgBottom) {
+        rawProgress = 1;
       }
+      rawProgress = Math.max(0, Math.min(1, rawProgress));
 
       // 非可逆：只取历史最大值（Math.max(cachedMaxScroll, currentScroll) 算法）
       cachedMaxProgress.current = Math.max(cachedMaxProgress.current, rawProgress);
