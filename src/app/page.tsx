@@ -10,18 +10,25 @@ import { InteractiveMap } from '@/components/desktop/InteractiveMap';
 import { MobileExperience } from '@/components/mobile/MobileExperience';
 import { ScrollSections } from '@/components/sections/ScrollSections';
 import { Footer } from '@/components/sections/Footer';
+import { CustomScrollbar } from '@/components/shared/CustomScrollbar';
 
 export default function Home() {
-  const { isEnvelopeOpened, isTransitioning, setTransitioning } = useAppStore();
+  const { isEnvelopeOpened, isTransitioning, setTransitioning, isIntroReady } =
+    useAppStore();
   const isMobile = useIsMobile();
   const [mounted, setMounted] = useState(false);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useVirtualScroll(mounted && !isEnvelopeOpened && !isMobile);
+  const lenis = useVirtualScroll(
+    mounted && !isEnvelopeOpened && !isMobile && isIntroReady,
+  );
+  const scrollbarEnabled =
+    mounted && !isEnvelopeOpened && !isMobile && isIntroReady;
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
   useEffect(() => {
     document.documentElement.classList.add('home-scrollbar-hidden');
     document.body.classList.add('home-scrollbar-hidden');
@@ -33,11 +40,24 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (isEnvelopeOpened && isTransitioning) {
-      transitionTimerRef.current = setTimeout(() => {
-        setTransitioning(false);
-      }, 1400);
-    }
+    const locked = mounted && !isEnvelopeOpened && !isIntroReady;
+    if (!locked) return;
+
+    document.documentElement.classList.add('intro-scroll-locked');
+    document.body.classList.add('intro-scroll-locked');
+
+    return () => {
+      document.documentElement.classList.remove('intro-scroll-locked');
+      document.body.classList.remove('intro-scroll-locked');
+    };
+  }, [mounted, isEnvelopeOpened, isIntroReady]);
+
+  useEffect(() => {
+    if (!isEnvelopeOpened || !isTransitioning) return;
+
+    transitionTimerRef.current = setTimeout(() => {
+      setTransitioning(false);
+    }, 1400);
 
     return () => {
       if (transitionTimerRef.current) {
@@ -51,7 +71,7 @@ export default function Home() {
   }
 
   return (
-    <main className="relative w-full min-h-screen">
+    <main className="relative min-h-screen w-full">
       <Footer />
 
       <AnimatePresence mode="wait">
@@ -70,7 +90,7 @@ export default function Home() {
         ) : (
           <motion.div
             key="content"
-            className="relative z-10 w-full min-h-screen"
+            className="relative z-10 min-h-screen w-full"
             initial={{ opacity: 0, filter: 'blur(10px)' }}
             animate={{ opacity: 1, filter: 'blur(0px)' }}
             transition={{ duration: 1.5, ease: 'easeOut' }}
@@ -84,21 +104,38 @@ export default function Home() {
         {isTransitioning && (
           <motion.div
             key="transition-overlay"
-            className="page-paper fixed inset-0 z-[100] flex items-center justify-center"
+            className="page-paper fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6"
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 1, ease: 'easeInOut' }}
           >
+            <div className="flex items-center gap-2">
+              {[0, 1, 2].map((i) => (
+                <motion.span
+                  key={i}
+                  className="block h-2.5 w-2.5 rounded-full bg-[#c23643]"
+                  animate={{ opacity: [0.3, 1, 0.3], y: [0, -4, 0] }}
+                  transition={{
+                    duration: 1.2,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                    delay: i * 0.15,
+                  }}
+                />
+              ))}
+            </div>
             <motion.p
               className="font-serif text-lg tracking-[0.22em] text-muted-foreground"
               animate={{ opacity: [0.4, 0.8, 0.4] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
             >
-              加载中…
+              加载中...
             </motion.p>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <CustomScrollbar enabled={scrollbarEnabled} lenis={lenis} />
     </main>
   );
 }
